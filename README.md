@@ -23,7 +23,7 @@
 
 | 依赖 | 版本 |
 |---|---|
-| Python | ≥ 3.10（代码使用了 `str \| None` 等新语法） |
+| Python | ≥ 3.11（`fastapi==0.163.0` 要求 ≥ 3.11） |
 | Node.js | ≥ 18（Vite 5 要求） |
 
 ## 快速开始
@@ -124,6 +124,7 @@ python apps/server/scripts/reset_demo.py
 | 质检 | sympy 代入验算，驳回不通过的题 | 符号计算 |
 | 讲解 | 错因归因 + 选可视化模板与参数 | 语言模型 |
 | 检索 | 追问时召回卡片原文并标出处 | 本地检索 |
+| 批改 | 分步诊断 + 更优解法 + 流式评语 | 语言模型 |
 
 ```mermaid
 sequenceDiagram
@@ -161,12 +162,12 @@ sequenceDiagram
 | 路径 | 内容 |
 |---|---|
 | `apps/server/app/` | FastAPI 服务、编排器、七个 Agent、Provider 层 |
-| `apps/server/tests/` | 192 项 pytest：判分、验算、检索、编排回环、批改、知识库统计、接口 |
+| `apps/server/tests/` | 22 个测试文件、277 个用例（`pytest` 一条命令跑完，约 46 s）：判分、验算、检索、编排回环、批改、知识库统计、接口 |
 | `apps/server/scripts/` | 演示前重置脚本 |
 | `apps/web/src/` | React 前端：看板、练习卷、摄像头、函数图像、知识谱系 |
 | `docs/技术文档.md` / `.pdf` | 技术文档正文与提交版 PDF |
 | `docs/ai-logs/` | 与 AI 的核心对话快照（提交物） |
-| `data/samples/` | 演示用板书样例图（入库）；`data/*.db`、`uploads/` 为运行数据，不入库 |
+| `apps/web/public/samples/` | 演示用板书样例图与样例试卷 PDF（入库；三张图由 `scripts/make_samples.py` 生成）；`data/*.db`、`uploads/` 为运行数据，不入库 |
 
 ## 和同类项目的差异
 
@@ -185,13 +186,13 @@ GitHub 上「错题本 / AI 出题」类项目不少，但**对生成内容的�
 | 生成题目是否正确 | 不验证，模型说了算 | **sympy 代入验算，不通过打回重生成** |
 | 过程是否可见 | 只给结果 | 七个 Agent 实时看板，谁驳回了谁一眼可见 |
 | 没有 API Key 能否跑 | 需要 OpenAI / Gemini Key | **mock 模式零依赖跑通全链路** |
-| 交付形态 | Web 服务 / Docker | Web + 145 MB 双击即用桌面版 |
+| 交付形态 | Web 服务 / Docker | Web + 桌面版：zip 解压即用；另出 145 MB 单文件（首次自解压 36–48 s，不主推） |
 | 知识沉淀 | 错题列表 | 知识点卡片 + 被问次数 + 知识谱系 |
 
 ## 边界与诚实声明
 
 - `mock` 模式**不读取图片内容**：按上传文件名分流到内置的三套样例（二次函数 / 一元二次方程 / 三角函数），用于无密钥演示；文件名认不出时用二次函数那套。切到真实模型（`VLM_PROVIDER=qwen|glm`）才真正识别。
-- 交付的题目全部经过验算：验算不通过的题被丢弃并由命题 Agent 重生成；若多轮仍不通过，整批拒绝交付而不是带病上线。
+- 带 `verify` 的题全部代入验算：轮次用尽后只交付 `verified` 为真的题，其余丢弃并在 `done` 事件里报数；仅当一道都没过时才整批拒绝，不入库。**注意**：没有 `verify` 字段的题只走结构检查分支（当前直接放行，并未做符号验算），`verify.py:check_question` 对此返回通过。
 - 人工修正只允许改四个字段（标题/摘要/公式/正文），服务端做字段白名单；卡片不存在返回 404。
 - 摄像头依赖 `getUserMedia`，仅在**安全上下文**可用（`127.0.0.1` 或 HTTPS）。用局域网 IP 访问时浏览器会拒绝，此时改用「选择图片」。
 - 识别不确定的内容标 `[无法识别]`，不猜。
@@ -204,7 +205,7 @@ GitHub 上「错题本 / AI 出题」类项目不少，但**对生成内容的�
 | README 复现指南 | 本文件 |
 | AI 对话快照 | `docs/ai-logs/`，索引见 `docs/ai-logs/README.md` |
 | 技术文档 | `docs/技术文档.pdf`（正文 `docs/技术文档.md`） |
-| 桌面版（可选） | [Releases](https://github.com/Td12138/yizhi-chengke/releases)：`yizhi-chengke-0.1.1-win64.zip` 解压即用（推荐，约 0.2s 出窗），`YizhiChengke-0.1.1-portable.exe` 单文件（首次解压 36–48s） |
+| 桌面版（可选） | [Releases](https://github.com/Td12138/yizhi-chengke/releases)：`yizhi-chengke-0.1.2-win64.zip` 解压即用（推荐，约 0.2s 出窗），`YizhiChengke-0.1.2-portable.exe` 单文件（首次解压 36–48s） |
 | 演示视频 | 随作品在赛事平台提交，不入库 |
 
 ## 红线
