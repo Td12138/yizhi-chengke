@@ -32,3 +32,6 @@ apps/desktop/build/.cache/
 # ===== LaTeX 构建残留（可重建，不入库）=====
 *.aux
 *.log
+
+# ===== 导出产物（由 export-pdf.ps1 生成，可重建）=====
+docs/figs/
