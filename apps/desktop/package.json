@@ -1,10 +1,10 @@
 {
   "name": "yizhi-chengke-desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "一纸成课桌面版：Electron 外壳 + FastAPI 后端（Web 模式仍是主路径）",
   "main": "main.js",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "author": "YizhiChengke",
   "scripts": {
     "postinstall": "node build/ensure-electron.js",
@@ -50,7 +50,9 @@
         "from": "runtime",
         "to": "runtime",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
         ]
       },
       {

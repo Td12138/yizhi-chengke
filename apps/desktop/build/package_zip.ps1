@@ -19,7 +19,6 @@ $ErrorActionPreference = "Stop"
 $ReleaseLeafName = "release"
 $UnpackedLeafName = "win-unpacked"
 $AppExeName = "一纸成课.exe"
-$ZipFileName = "一纸成课-win64.zip"
 $PortablePattern = "YizhiChengke-*-portable.exe"
 $PortableCopyName = "一纸成课-portable.exe"
 
@@ -27,6 +26,9 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $DesktopDir = Split-Path -Parent $ScriptDir
 $ReleaseDir = Join-Path $DesktopDir $ReleaseLeafName
 $UnpackedDir = Join-Path $ReleaseDir $UnpackedLeafName
+# 版本从 package.json 读，保证 zip 名与 Release/README 的 0.1.x 一致
+$Version = (Get-Content -LiteralPath (Join-Path $DesktopDir "package.json") -Raw | ConvertFrom-Json).version
+$ZipFileName = "yizhi-chengke-$Version-win64.zip"
 $ZipPath = Join-Path $ReleaseDir $ZipFileName
 $PortableCopy = Join-Path $ReleaseDir $PortableCopyName
 
@@ -62,6 +64,16 @@ if (-not (Test-Path -LiteralPath $UnpackedDir)) {
 }
 if (-not (Test-Path -LiteralPath (Join-Path $UnpackedDir $AppExeName))) {
     throw "未找到 $UnpackedDir\$AppExeName，请先运行 npm run package"
+}
+
+# ---- 0.5 清除字节码（防止 .pyc 把构建机绝对路径带进发布包）----
+$ResourcesDir = Join-Path $UnpackedDir "resources"
+if (Test-Path -LiteralPath $ResourcesDir) {
+    $cacheDirs = @(Get-ChildItem -LiteralPath $ResourcesDir -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue)
+    foreach ($dir in $cacheDirs) { Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+    $pycFiles = @(Get-ChildItem -LiteralPath $ResourcesDir -Recurse -File -Filter "*.pyc" -ErrorAction SilentlyContinue)
+    foreach ($file in $pycFiles) { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction SilentlyContinue }
+    Write-Host "==> 清理字节码：__pycache__ $($cacheDirs.Count) 个 / .pyc $($pycFiles.Count) 个"
 }
 
 # ---- 1. 压缩 ----
