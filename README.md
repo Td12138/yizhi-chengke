@@ -124,7 +124,6 @@ sequenceDiagram
 | `apps/server/app/` | FastAPI 服务、编排器、六个 Agent、Provider 层 |
 | `apps/server/scripts/` | 演示前重置等运维脚本 |
 | `apps/web/src/` | React 前端：Agent 看板、练习卷、可视化讲解 |
-| `docs/方案设计.md` | 选题论证、赛题对齐、3 天排期、答辩话术 |
 | `docs/技术文档.md` | 技术文档正文（提交版 PDF 由此导出） |
 | `docs/ai-logs/` | 与 AI 的核心对话快照（提交物） |
 | `data/` | 运行数据（SQLite / 上传图片），不入库 |
