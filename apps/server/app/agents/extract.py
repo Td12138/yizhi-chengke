@@ -15,7 +15,13 @@ class ExtractAgent(Agent):
     async def run(self) -> list[dict]:
         await self.emit("running", "从版面块萃取知识点")
         blocks = self.ctx.state.get("blocks", [])
-        result = await llm.chat_json("extract", {"blocks": blocks})
+        # 原始文件名：mock 萃取按它选样例集（上传落盘名是 uuid，不能用）
+        source = self.ctx.state.get("source_name") or self.ctx.state.get(
+            "image_path", ""
+        )
+        result = await llm.chat_json(
+            "extract", {"blocks": blocks, "source": source}
+        )
         cards = result.get("cards", []) or []
 
         source_id = int(self.ctx.state["source_id"])

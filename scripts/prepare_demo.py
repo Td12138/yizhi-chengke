@@ -26,7 +26,11 @@ from app.orchestrator import Orchestrator, new_run_id  # noqa: E402
 
 # 演示用的样例图与出题需求
 SAMPLE_DIR = ROOT / "apps" / "web" / "public" / "samples"
-DEMO_IMAGE = SAMPLE_DIR / "sample-quadratic.png"
+DEMO_IMAGES = [
+    SAMPLE_DIR / "sample-quadratic.png",
+    SAMPLE_DIR / "sample-equation.png",
+    SAMPLE_DIR / "sample-trig.png",
+]
 DEMO_REQUIREMENT = "给我出 5 道这页的变式题，中等难度"
 DEMO_COUNT = 5
 TABLES = ("agent_event", "attempt", "question", "card", "source")
@@ -49,15 +53,16 @@ async def prepare(purge_images: bool) -> None:
     bus = EventBus()
     orchestrator = Orchestrator(bus)
 
-    # 复制到上传目录再识别：归档改名只作用于副本，不会动仓库里的样例素材
-    staged = config.UPLOAD_DIR / f"demo-{uuid.uuid4().hex[:8]}{DEMO_IMAGE.suffix}"
-    shutil.copyfile(DEMO_IMAGE, staged)
-
-    run_id = new_run_id()
-    bus.create(run_id)
-    await orchestrator.ingest(run_id, staged)
-    if bus.get(run_id).error:
-        raise SystemExit(f"入库失败：{bus.get(run_id).error}")
+    # 三张样例各入库一次：mock 按文件名分流到不同知识点集，
+    # 复制到上传目录再识别，归档改名只作用于副本
+    for sample in DEMO_IMAGES:
+        staged = config.UPLOAD_DIR / f"demo-{uuid.uuid4().hex[:8]}{sample.suffix}"
+        shutil.copyfile(sample, staged)
+        run_id = new_run_id()
+        bus.create(run_id)
+        await orchestrator.ingest(run_id, staged, source_name=sample.name)
+        if bus.get(run_id).error:
+            raise SystemExit(f"入库失败（{sample.name}）：{bus.get(run_id).error}")
 
     cards = db.list_cards()
     run_id = new_run_id()

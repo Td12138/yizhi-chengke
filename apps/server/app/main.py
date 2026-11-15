@@ -114,7 +114,8 @@ async def ingest(file: UploadFile = File(...)) -> dict:
 
     run_id = new_run_id()
     bus.create(run_id)
-    spawn(orchestrator.ingest(run_id, upload_path))
+    # 原始文件名要传下去：mock 靠它选样例集，落盘的 uuid 名字认不出主题
+    spawn(orchestrator.ingest(run_id, upload_path, file.filename))
     return {"run_id": run_id, "kind": kind}
 
 

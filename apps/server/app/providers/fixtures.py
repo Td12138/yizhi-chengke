@@ -1,6 +1,8 @@
 """Mock 数据源：无密钥、无网络也能跑通完整漏斗，同时充当演示用的稳定数据。
 
-所有内容均为自造的教学样例（二次函数），不含任何真实资料。
+所有内容均为自造的教学样例（二次函数 / 一元二次方程 / 三角函数三套），不含任何真实资料。
+三套样例按文件名关键字（quadratic / equation / trig，「二次函数 / 方程 / 三角」也行）分流，
+认不出文件名时回落到二次函数那套，保证「换一张图，知识点跟着变」。
 
 注意：mock 讲解（`mock_explain`）是**按题干关键词挑模板的固定样例文案**，不是模型生成的，
 也不是通解——它只覆盖对称轴 / 顶点 / 交点（判别式）/ 配方 / 代入求值五类问法，
@@ -19,6 +21,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import sympy as sp
 
@@ -30,8 +33,28 @@ from ..judge import (
     normalize,
 )
 
+# ---- 样例集：按文件名关键字分流，换一张图知识点跟着变 ----
+# 文件名关键字 → 样例集，按顺序命中第一个。同时覆盖：
+#   仓库样例图 01-二次函数… / 02-一元二次方程… / 03-三角…
+#   演示用英文名 sample-quadratic / sample-equation / sample-trig
+#   看不出主题但属于试题的 sample-exam.pdf（归到一元二次方程）
+SAMPLE_KEYWORDS = (
+    ("trig", ("trig", "三角", "正弦", "余弦")),
+    ("equation", ("equation", "方程", "求根", "exam")),
+    ("quadratic", ("quadratic", "二次函数", "抛物线")),
+)
+
+SET_LABELS = {
+    "quadratic": "二次函数",
+    "equation": "一元二次方程",
+    "trig": "三角函数",
+}
+
+# 默认集：文件名认不出时用它（老演示数据与现有测试都依赖这套内容）
+DEFAULT_SET = "quadratic"
+
 # 识别 Agent 的模拟输出：模拟一张板书的结构化结果
-MOCK_BLOCKS = [
+QUADRATIC_BLOCKS = [
     {"type": "title", "content": "二次函数的图象与性质"},
     {
         "type": "formula",
@@ -60,7 +83,7 @@ MOCK_BLOCKS = [
     },
 ]
 
-MOCK_CARDS = [
+QUADRATIC_CARDS = [
     {
         "title": "二次函数的一般式",
         "summary": "y = ax² + bx + c（a≠0），a 决定开口方向",
@@ -89,6 +112,179 @@ MOCK_CARDS = [
         "body": "Δ>0 有两个不同实零点；Δ=0 有一个重零点；Δ<0 无实零点。",
     },
 ]
+
+EQUATION_BLOCKS = [
+    {"type": "title", "content": "一元二次方程与求根公式"},
+    {
+        "type": "formula",
+        "content": "ax^2 + bx + c = 0 (a != 0)",
+        "latex": r"ax^{2} + bx + c = 0 \quad (a \neq 0)",
+    },
+    {
+        "type": "formula",
+        "content": "x = (-b ± sqrt(b^2 - 4ac)) / (2a)",
+        "latex": r"x = \dfrac{-b \pm \sqrt{b^{2} - 4ac}}{2a}",
+    },
+    {
+        "type": "formula",
+        "content": "D = b^2 - 4ac",
+        "latex": r"\Delta = b^{2} - 4ac",
+    },
+    {"type": "text", "content": "Δ>0 两个不等实根；Δ=0 两个相等实根；Δ<0 无实根"},
+    {
+        "type": "text",
+        "content": "因式分解：若 x1、x2 是两根，则 ax²+bx+c = a(x-x1)(x-x2)",
+    },
+    {"type": "text", "content": "韦达定理：x1+x2 = -b/a，x1x2 = c/a"},
+    {
+        "type": "table",
+        "content": "Δ>0 两个实根 / Δ=0 一个重根 / Δ<0 无实根；因式分解适合有有理根的情形",
+    },
+]
+
+EQUATION_CARDS = [
+    {
+        "title": "求根公式",
+        "summary": "ax²+bx+c=0 的两根可由系数直接算出",
+        "subject": "数学",
+        "tags": ["一元二次方程", "求根公式"],
+        "formula": r"x = \dfrac{-b \pm \sqrt{b^{2} - 4ac}}{2a}",
+        "body": (
+            "先把方程化成 ax²+bx+c=0，再算 Δ=b²-4ac 代入求根公式。"
+            "a 出现在分母，所以必须 a≠0。"
+        ),
+    },
+    {
+        "title": "根的判别式",
+        "summary": "Δ = b² - 4ac 决定实根的个数",
+        "subject": "数学",
+        "tags": ["一元二次方程", "判别式", "根的个数"],
+        "formula": r"\Delta = b^{2} - 4ac",
+        "body": (
+            "Δ>0 两个不等实根；Δ=0 两个相等实根（重根）；"
+            "Δ<0 无实根，但在复数范围内有一对共轭复根。"
+        ),
+    },
+    {
+        "title": "因式分解法",
+        "summary": "把方程拆成两个一次因式的乘积再取根",
+        "subject": "数学",
+        "tags": ["一元二次方程", "因式分解"],
+        "formula": r"ax^{2} + bx + c = a(x - x_1)(x - x_2)",
+        "body": (
+            "十字相乘或先求根再拆因式；能分解时比套公式快，"
+            "但只适用于有有理根的情形。"
+        ),
+    },
+    {
+        "title": "根与系数的关系",
+        "summary": "不解方程也能求两根之和与两根之积",
+        "subject": "数学",
+        "tags": ["一元二次方程", "韦达定理"],
+        "formula": r"x_1 + x_2 = -\dfrac{b}{a},\quad x_1 x_2 = \dfrac{c}{a}",
+        "body": "韦达定理常用于求参数、构造以两根为根的新方程，或检验求出的根是否合理。",
+    },
+]
+
+TRIG_BLOCKS = [
+    {"type": "title", "content": "三角函数的图象与性质"},
+    {
+        "type": "formula",
+        "content": "sin(pi + a) = -sin a, cos(pi + a) = -cos a",
+        "latex": r"\sin(\pi + \alpha) = -\sin\alpha,\quad \cos(\pi + \alpha) = -\cos\alpha",
+    },
+    {
+        "type": "formula",
+        "content": "sin(a + b) = sin a cos b + cos a sin b",
+        "latex": r"\sin(\alpha + \beta) = \sin\alpha\cos\beta + \cos\alpha\sin\beta",
+    },
+    {"type": "text", "content": "y=sin x 与 y=cos x 的最小正周期 T=2π，y=tan x 的周期 T=π"},
+    {"type": "text", "content": "y = A sin(ωx + φ) 的周期 T = 2π/|ω|，振幅为 |A|"},
+    {
+        "type": "table",
+        "content": "第一象限全正 / 第二象限 sin 正 / 第三象限 tan 正 / 第四象限 cos 正",
+    },
+]
+
+TRIG_CARDS = [
+    {
+        "title": "诱导公式",
+        "summary": "把任意角的三角函数化到锐角",
+        "subject": "数学",
+        "tags": ["三角函数", "诱导公式"],
+        "formula": r"\sin(\pi + \alpha) = -\sin\alpha",
+        "body": (
+            "口诀「奇变偶不变，符号看象限」：先看 π/2 的奇数倍还是偶数倍，"
+            "再把 α 当锐角判断原函数在新象限的符号。"
+        ),
+    },
+    {
+        "title": "三角函数的图像与周期",
+        "summary": "正弦、余弦、正切的周期与振幅各不相同",
+        "subject": "数学",
+        "tags": ["三角函数", "周期", "图像"],
+        "formula": r"T = \dfrac{2\pi}{|\omega|}",
+        "body": (
+            "y=sin x、y=cos x 的周期是 2π，y=tan x 是 π；"
+            "y=A sin(ωx+φ) 的周期只由 ω 决定，振幅由 |A| 决定。"
+        ),
+    },
+    {
+        "title": "两角和与差公式",
+        "summary": "把复合角拆成两个单角的三角函数",
+        "subject": "数学",
+        "tags": ["三角函数", "和角公式"],
+        "formula": r"\sin(\alpha \pm \beta) = \sin\alpha\cos\beta \pm \cos\alpha\sin\beta",
+        "body": (
+            "sin 展开是「正余余正，符号同」；cos 展开是「余余正正，符号反」。"
+            "和角公式是推导二倍角公式的基础。"
+        ),
+    },
+]
+
+SETS = {
+    "quadratic": {"blocks": QUADRATIC_BLOCKS, "cards": QUADRATIC_CARDS},
+    "equation": {"blocks": EQUATION_BLOCKS, "cards": EQUATION_CARDS},
+    "trig": {"blocks": TRIG_BLOCKS, "cards": TRIG_CARDS},
+}
+
+# 兼容旧引用：默认集就是以前的「那一套」
+MOCK_BLOCKS = QUADRATIC_BLOCKS
+MOCK_CARDS = QUADRATIC_CARDS
+
+
+def detect_set(source: str | Path | None) -> str | None:
+    """按文件名关键字选样例集；认不出返回 None（由调用方回落到默认）。"""
+    if not source:
+        return None
+    name = Path(str(source)).name.lower()
+    for key, keywords in SAMPLE_KEYWORDS:
+        if any(keyword in name for keyword in keywords):
+            return key
+    return None
+
+
+def match_note(source: str | Path | None) -> str:
+    """事件日志用的一句话：命中哪套样例集，或说明回落到默认。"""
+    key = detect_set(source)
+    if key is None:
+        return "未匹配到样例集，使用默认"
+    return f"命中样例集：{SET_LABELS[key]}"
+
+
+def blocks_for(source: str | Path | None) -> list[dict]:
+    """按文件名取样例集的版面块；返回副本，调用方随便改不影响样例。"""
+    key = detect_set(source) or DEFAULT_SET
+    template = MOCK_BLOCKS if key == DEFAULT_SET else SETS[key]["blocks"]
+    return [{**block} for block in template]
+
+
+def cards_for(source: str | Path | None) -> list[dict]:
+    """按文件名取样例集的卡片；tags 也复制，避免调用方改到样例本体。"""
+    key = detect_set(source) or DEFAULT_SET
+    template = MOCK_CARDS if key == DEFAULT_SET else SETS[key]["cards"]
+    return [{**card, "tags": list(card.get("tags", []))} for card in template]
+
 
 
 def mock_questions(round_no: int) -> list[dict]:

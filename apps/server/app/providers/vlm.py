@@ -25,9 +25,12 @@ VLM_SYSTEM_PROMPT = (
 )
 
 
-async def recognize(image_path: Path) -> list[dict[str, Any]]:
+async def recognize(
+    image_path: Path, source: str | Path | None = None
+) -> list[dict[str, Any]]:
+    """`source` 是上传时的原始文件名：mock 靠它选样例集，真实模型忽略。"""
     if config.VLM_PROVIDER == "mock":
-        return [dict(block) for block in fixtures.MOCK_BLOCKS]
+        return fixtures.blocks_for(source or image_path)
     return await _remote(image_path)
 
 

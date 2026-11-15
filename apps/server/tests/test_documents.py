@@ -12,6 +12,7 @@ from docx import Document
 from app import config, db, documents
 from app.events import EventBus
 from app.orchestrator import Orchestrator
+from app.providers import fixtures
 
 RUN_ID = "test-doc-ingest"
 # 正常中文样本：每页可读字数远超 40
@@ -157,6 +158,8 @@ def test_pdf_text_layer_skips_vision(tmp_path, monkeypatch):
 
 
 def test_pdf_garbled_text_renders_pages_for_vision(tmp_path, monkeypatch):
+    # 真实 provider 才走渲染；mock 会按文件名直接选样例集（见下一个用例）
+    monkeypatch.setattr(config, "VLM_PROVIDER", "qwen")
     path = tmp_path / "garbled.pdf"
     _make_pdf(path, pages=5)
     monkeypatch.setattr(documents, "extract_pdf_text", lambda _path: [GARBLED_PAGE] * 5)
@@ -197,6 +200,31 @@ def test_render_pdf_pages_respects_limit_and_dpi(tmp_path):
     width, height = _png_size(images[0])
     assert width == round(612 / 72 * documents.RENDER_DPI)
     assert height == round(792 / 72 * documents.RENDER_DPI)
+
+
+def test_pdf_mock_picks_sample_set_by_filename(tmp_path, monkeypatch):
+    path = tmp_path / "sample-exam.pdf"
+    _make_pdf(path, pages=7)
+    monkeypatch.setattr(documents, "extract_pdf_text", lambda _path: [GARBLED_PAGE] * 7)
+
+    blocks, note = asyncio.run(documents.read_document(path))
+
+    assert blocks == fixtures.SETS["equation"]["blocks"]
+    assert "一元二次方程" in note
+    assert "mock 模式不渲染" in note
+
+
+def test_document_uses_source_name_when_disk_name_is_uuid(tmp_path, monkeypatch):
+    path = tmp_path / "uuid.pdf"
+    _make_pdf(path)
+    monkeypatch.setattr(documents, "extract_pdf_text", lambda _path: [GARBLED_PAGE])
+
+    blocks, note = asyncio.run(
+        documents.read_document(path, source_name="sample-trig.pdf")
+    )
+
+    assert blocks == fixtures.SETS["trig"]["blocks"]
+    assert "三角函数" in note
 
 
 # ---- 截断保护 ----

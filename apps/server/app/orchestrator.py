@@ -66,8 +66,9 @@ class Orchestrator:
         if path.suffix.lower() not in config.DOC_SUFFIXES:
             return await self._step(ctx, RecognizeAgent)
 
-        await self._emit(run_id, "recognize", "running", f"读取文档：{path.name}")
-        blocks, note = await documents.read_document(path)
+        source = ctx.state.get("source_name") or path.name
+        await self._emit(run_id, "recognize", "running", f"读取文档：{source}")
+        blocks, note = await documents.read_document(path, source_name=source)
         ctx.state["blocks"] = blocks
         # 事件里说清走的哪条路径：文本层直读 / 渲染前 N 页
         await self._emit(
@@ -132,9 +133,22 @@ class Orchestrator:
             )
         return archived
 
-    async def ingest(self, run_id: str, file_path: Path) -> None:
-        """拍照 / 上传文档 → 版面块 → 知识点卡片 → 原文件归档 → 入库。"""
-        ctx = RunContext(run_id, self.bus, {"image_path": str(file_path)})
+    async def ingest(
+        self, run_id: str, file_path: Path, source_name: str | None = None
+    ) -> None:
+        """拍照 / 上传文档 → 版面块 → 知识点卡片 → 原文件归档 → 入库。
+
+        `source_name` 是上传时的原始文件名：mock 按它选样例集，
+        落盘的 uuid 文件名不参与判定。
+        """
+        ctx = RunContext(
+            run_id,
+            self.bus,
+            {
+                "image_path": str(file_path),
+                "source_name": source_name or file_path.name,
+            },
+        )
         try:
             blocks = await self._read_input(run_id, ctx, file_path)
             ctx.state["source_id"] = db.insert_source(str(file_path), blocks)

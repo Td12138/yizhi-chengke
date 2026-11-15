@@ -26,7 +26,7 @@ from docx.text.paragraph import Paragraph
 from pypdf import PdfReader
 
 from . import config
-from .providers import vlm
+from .providers import fixtures, vlm
 
 # 可读字符：中日韩 + 日文假名 + 韩文 + 拉丁字母 + 数字
 READABLE_CHARS = re.compile(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7afA-Za-z0-9]")
@@ -218,12 +218,29 @@ def render_pdf_pages(path: Path, limit: int, out_dir: Path) -> list[Path]:
     return images
 
 
-async def _pdf_document(path: Path) -> tuple[list[dict], str]:
+def _mock_note(note: str, source: str) -> str:
+    """mock 下补一句「用了哪套样例集」；真实 provider 原样返回。"""
+    if config.VLM_PROVIDER != "mock":
+        return note
+    return f"{note}；{fixtures.match_note(source)}"
+
+
+async def _pdf_document(path: Path, source: str) -> tuple[list[dict], str]:
     """PDF：文本层可用就直读，否则渲染前 N 页交给视觉模型。"""
     pages = extract_pdf_text(path)
     if is_text_usable(pages):
         blocks = truncate_blocks(text_blocks("\n\n".join(pages)))
-        return blocks, f"文本层可用，直接解析（{len(pages)} 页）"
+        note = _mock_note(f"文本层可用，直接解析（{len(pages)} 页）", source)
+        return blocks, note
+
+    if config.VLM_PROVIDER == "mock":
+        # mock 视觉模型不看像素：渲染只会把同一套样例重复 N 遍，改按文件名选套
+        blocks = truncate_blocks(fixtures.blocks_for(source))
+        note = _mock_note(
+            f"文本层不可用（乱码或过短），文档共 {len(pages)} 页；mock 模式不渲染",
+            source,
+        )
+        return blocks, note
 
     with tempfile.TemporaryDirectory(prefix=RENDER_TMP_PREFIX) as tmp_dir:
         images = render_pdf_pages(path, config.MAX_DOC_PAGES, Path(tmp_dir))
@@ -238,22 +255,29 @@ async def _pdf_document(path: Path) -> tuple[list[dict], str]:
     return truncate_blocks(blocks), note
 
 
-async def read_document(path: Path) -> tuple[list[dict], str]:
-    """按后缀解析文档，返回 (版面块, 给事件日志的一句说明)。"""
+async def read_document(
+    path: Path, source_name: str | None = None
+) -> tuple[list[dict], str]:
+    """按后缀解析文档，返回 (版面块, 给事件日志的一句说明)。
+
+    `source_name` 是上传时的原始文件名：mock 靠它选样例集（落盘名是 uuid）。
+    """
     path = Path(path)
+    source = source_name or path.name
     suffix = path.suffix.lower()
     if suffix == ".pdf":
-        return await _pdf_document(path)
+        return await _pdf_document(path, source)
     if suffix == ".docx":
         blocks = truncate_blocks(docx_blocks(path))
-        return blocks, f"docx 直接解析：{len(blocks)} 个段落/表格块"
+        return blocks, _mock_note(f"docx 直接解析：{len(blocks)} 个段落/表格块", source)
     if suffix in {".txt", ".md"}:
         blocks = truncate_blocks(text_blocks(_read_text_file(path), mark_headings=True))
-        return blocks, f"文本直接解析：{len(blocks)} 段（空行分段，按 # 认标题）"
+        note = _mock_note(f"文本直接解析：{len(blocks)} 段（空行分段，按 # 认标题）", source)
+        return blocks, note
     raise ValueError(f"不支持的文档类型：{suffix}")
 
 
-async def read_blocks(path: Path) -> list[dict]:
+async def read_blocks(path: Path, source_name: str | None = None) -> list[dict]:
     """只要版面块时的入口（结构与本项目的视觉识别输出一致）。"""
-    blocks, _ = await read_document(path)
+    blocks, _ = await read_document(path, source_name=source_name)
     return blocks

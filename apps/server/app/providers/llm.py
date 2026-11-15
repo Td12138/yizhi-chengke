@@ -107,7 +107,8 @@ async def chat_stream(task: str, payload: dict[str, Any]) -> AsyncIterator[str]:
 
 def _mock(task: str, payload: dict[str, Any]) -> dict[str, Any]:
     if task == "extract":
-        return {"cards": fixtures.MOCK_CARDS}
+        # source 是上传时的原始文件名（不是 uuid 临时名），mock 靠它选样例集
+        return {"cards": fixtures.cards_for(payload.get("source"))}
     if task == "compose":
         return {"questions": fixtures.mock_questions(int(payload.get("round", 1)))}
     if task == "explain":
