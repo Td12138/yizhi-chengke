@@ -25,6 +25,7 @@ from pathlib import Path
 
 import sympy as sp
 
+from .. import safe_math
 from ..judge import (
     FULLWIDTH_TABLE,
     NUMBER_TOLERANCE,
@@ -287,9 +288,45 @@ def cards_for(source: str | Path | None) -> list[dict]:
 
 
 
-def mock_questions(round_no: int) -> list[dict]:
-    """round_no=1 故意留一道「答案不自洽」的题，供质检 Agent 当场驳回。"""
-    wrong_expect = 1.0 if round_no == 1 else -1.0
+# 按卡片 tags / subject 判定该出哪套题；三套之间靠主题关键词区分
+CARD_SET_KEYWORDS = (
+    ("trig", ("三角", "trig", "正弦", "余弦")),
+    ("equation", ("一元二次方程", "方程", "equation", "求根")),
+    ("quadratic", ("二次函数", "quadratic", "抛物线")),
+)
+
+
+def detect_cards_set(cards: list[dict] | None) -> str:
+    """从卡片标签判定命题主题；认不出回落默认集。"""
+    chunks: list[str] = []
+    for card in cards or []:
+        tags = card.get("tags") or []
+        if isinstance(tags, str):
+            tags = tags.split(",")
+        chunks.extend(str(tag) for tag in tags)
+        chunks.append(str(card.get("subject", "")))
+    haystack = " ".join(chunks).lower()
+    for key, keywords in CARD_SET_KEYWORDS:
+        if any(keyword.lower() in haystack for keyword in keywords):
+            return key
+    return DEFAULT_SET
+
+
+def mock_questions(
+    round_no: int, cards: list[dict] | None = None
+) -> list[dict]:
+    """按卡片主题出 5 道题；round_no=1 固定第 4 题验算失败，供质检回环演示。"""
+    first_round = int(round_no) == 1
+    key = detect_cards_set(cards)
+    if key == "equation":
+        return _equation_questions(first_round)
+    if key == "trig":
+        return _trig_questions(first_round)
+    return _quadratic_questions(first_round)
+
+
+def _quadratic_questions(first_round: bool) -> list[dict]:
+    wrong_expect = 1.0 if first_round else -1.0
     return [
         {
             "stem_latex": r"求 $y = x^{2} - 4x + 3$ 的对称轴。",
@@ -343,6 +380,135 @@ def mock_questions(round_no: int) -> list[dict]:
     ]
 
 
+def _equation_questions(first_round: bool) -> list[dict]:
+    bad_expect = 1.0 if first_round else 0.0
+    return [
+        {
+            "stem_latex": r"方程 $x^{2} - 5x + 6 = 0$ 较大的根是？",
+            "qtype": "fill",
+            "options": [],
+            "answer": r"$3$",
+            "solution": r"$\Delta = 25 - 24 = 1$，$x = \dfrac{5 \pm 1}{2}$，较大的根为 $3$。",
+            "difficulty": "easy",
+            "verify": {
+                "expr": "(5 + sqrt((-5)**2 - 4*1*6)) / (2*1)",
+                "subs": {},
+                "expect": 3.0,
+            },
+        },
+        {
+            "stem_latex": r"方程 $x^{2} - 4x + 4 = 0$ 的判别式 $\Delta$ 等于？",
+            "qtype": "fill",
+            "options": [],
+            "answer": r"$0$",
+            "solution": r"$\Delta = (-4)^{2} - 4 \times 1 \times 4 = 0$。",
+            "difficulty": "easy",
+            "verify": {"expr": "(-4)**2 - 4*1*4", "subs": {}, "expect": 0.0},
+        },
+        {
+            "stem_latex": r"方程 $x^{2} - 5x + 6 = 0$ 的根的情况是？",
+            "qtype": "choice",
+            "options": ["两个不等实根", "两个相等实根", "无实根", "无法确定"],
+            "answer": "A",
+            "solution": r"$\Delta = 25 - 24 = 1 > 0$，故有两个不等实根。",
+            "difficulty": "medium",
+            "verify": {"expr": "(-5)**2 - 4*1*6", "subs": {}, "expect": 1.0},
+        },
+        {
+            "stem_latex": r"把 $x^{2} - 5x + 6$ 因式分解。",
+            "qtype": "fill",
+            "options": [],
+            "answer": r"$(x-2)(x-3)$",
+            "solution": r"$x^{2}-5x+6 = (x-2)(x-3)$。",
+            "difficulty": "hard",
+            "verify": {
+                "expr": "(x - 2)*(x - 3) - (x**2 - 5*x + 6)",
+                "subs": {"x": 5},
+                "expect": bad_expect,
+            },
+        },
+        {
+            "stem_latex": r"方程 $x^{2} - 5x + 6 = 0$ 的两根之积是？",
+            "qtype": "fill",
+            "options": [],
+            "answer": r"$6$",
+            "solution": r"由韦达定理 $x_1x_2 = \dfrac{c}{a} = 6$。",
+            "difficulty": "medium",
+            "verify": {
+                "expr": "((5 + sqrt(1)) / 2) * ((5 - sqrt(1)) / 2)",
+                "subs": {},
+                "expect": 6.0,
+            },
+        },
+    ]
+
+
+def _trig_questions(first_round: bool) -> list[dict]:
+    bad_expect = 1.0 if first_round else 0.0
+    return [
+        {
+            "stem_latex": r"函数 $y = 2\sin x$ 的振幅是？",
+            "qtype": "fill",
+            "options": [],
+            "answer": r"$2$",
+            "solution": r"$y = A\sin x$ 的振幅是 $|A| = 2$。",
+            "difficulty": "easy",
+            "verify": {"expr": "abs(2)", "subs": {}, "expect": 2.0},
+        },
+        {
+            "stem_latex": r"$\sin\dfrac{\pi}{6}$ 的值是？",
+            "qtype": "fill",
+            "options": [],
+            "answer": r"$\dfrac{1}{2}$",
+            "solution": r"$\sin 30^{\circ} = \dfrac{1}{2}$。",
+            "difficulty": "easy",
+            "verify": {"expr": "sin(0.5235987755982988)", "subs": {}, "expect": 0.5},
+        },
+        {
+            "stem_latex": r"函数 $y = \tan x$ 的最小正周期是？",
+            "qtype": "choice",
+            "options": [r"$\dfrac{\pi}{2}$", r"$\pi$", r"$2\pi$", r"$4\pi$"],
+            "answer": "B",
+            "solution": r"$\tan x$ 的最小正周期为 $\pi$。",
+            "difficulty": "medium",
+            "verify": {
+                "expr": "6.283185307179586 / 2",
+                "subs": {},
+                "expect": 3.141592653589793,
+            },
+        },
+        {
+            "stem_latex": r"化简 $\sin(\pi + \alpha)$。",
+            "qtype": "fill",
+            "options": [],
+            "answer": r"$-\sin\alpha$",
+            "solution": r"诱导公式：$\sin(\pi + \alpha) = -\sin\alpha$。",
+            "difficulty": "medium",
+            "verify": {
+                "expr": "sin(3.141592653589793 + 0.5) + sin(0.5)",
+                "subs": {},
+                "expect": bad_expect,
+            },
+        },
+        {
+            "stem_latex": r"把 $\sin(\alpha + \beta)$ 展开。",
+            "qtype": "fill",
+            "options": [],
+            "answer": r"$\sin\alpha\cos\beta + \cos\alpha\sin\beta$",
+            "solution": r"和角公式：$\sin(\alpha+\beta)=\sin\alpha\cos\beta+\cos\alpha\sin\beta$。",
+            "difficulty": "hard",
+            "verify": {
+                "expr": (
+                    "sin(0.5 + 0.7) - (sin(0.5)*cos(0.7) + cos(0.5)*sin(0.7))"
+                ),
+                "subs": {},
+                "expect": 0.0,
+            },
+        },
+    ]
+
+
+
 # ---- mock 讲解：按题干分类的固定样例文案，不是模型输出 ----
 
 # 样例题 y = x² - 4x + 3 的系数：题干解析不出来时退回这套值
@@ -391,7 +557,9 @@ def coefficients(stem: str) -> tuple[float, float, float]:
     expr_text = IMPLICIT_PRODUCT.sub(r"\1*x", match.group(1) if match else "")
     try:
         x = sp.Symbol("x")
-        values = [float(value) for value in sp.Poly(sp.sympify(expr_text), x).all_coeffs()]
+        # 题干同样可能来自模型输出：一律走受限解析，不用裸 sympify
+        expr = safe_math.parse_expression(expr_text)
+        values = [float(value) for value in sp.Poly(expr, x).all_coeffs()]
     except Exception:  # 解析不了就用样例值，讲解图照样能画
         return SAMPLE_A, SAMPLE_B, SAMPLE_C
     if len(values) != 3:  # all_coeffs 高次在前，三项才说明是二次式

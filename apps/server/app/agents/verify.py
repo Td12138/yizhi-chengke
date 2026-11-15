@@ -1,6 +1,9 @@
 """质检 Agent：用 sympy 代入验算，拦下答案不自洽的题。
 
 这是多 Agent 存在的核心理由——生成式命题必须能被独立验算否定。
+
+安全边界：`verify` 是模型输出，绝不能直接过 `sympify`（那是 eval）。
+解析统一走 `safe_math`：字符白名单 + 受限 `parse_expr` + 只收数值的 subs。
 """
 
 from __future__ import annotations
@@ -9,6 +12,8 @@ import re
 
 import sympy as sp
 
+from .. import safe_math
+from ..safe_math import UnsafeInput
 from .base import Agent
 
 # 数值比较容差
@@ -22,15 +27,22 @@ def check_question(question: dict) -> tuple[bool, str]:
         return True, "无可验算表达式，仅做结构检查"
 
     expr_text = str(verify.get("expr", "")).strip()
+    raw_subs = verify.get("subs") or {}
     try:
-        expr = sp.sympify(expr_text)
-        raw_subs = verify.get("subs") or {}
-        subs = {sp.Symbol(name): sp.nsimplify(value) for name, value in raw_subs.items()}
+        expr = safe_math.parse_expression(expr_text)
+        subs = safe_math.parse_subs(raw_subs)
         value = float(sp.N(expr.subs(subs)))
-    except Exception as exc:  # 表达式不可解析即视为不通过
+    except UnsafeInput as exc:  # 白名单拒绝：原样说明原因
+        return False, str(exc)
+    except Exception as exc:  # 语法错误 / 无法求值：同样视为不通过
         return False, f"表达式无法解析：{exc}"
 
-    expect = float(verify.get("expect", 0.0))
+    try:
+        expect = float(verify.get("expect", 0.0))
+    except (TypeError, ValueError):
+        # expect 是 "C" / None 时不能让整批发题中断
+        return False, f"期望值不是数值：{verify.get('expect')!r}"
+
     passed = abs(value - expect) <= TOLERANCE
     detail = f"{expr_text} @ {raw_subs or '(无代入)'} = {value:g}，期望 {expect:g}"
     return passed, detail

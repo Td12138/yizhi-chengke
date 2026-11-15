@@ -110,7 +110,11 @@ def _mock(task: str, payload: dict[str, Any]) -> dict[str, Any]:
         # source 是上传时的原始文件名（不是 uuid 临时名），mock 靠它选样例集
         return {"cards": fixtures.cards_for(payload.get("source"))}
     if task == "compose":
-        return {"questions": fixtures.mock_questions(int(payload.get("round", 1)))}
+        return {
+            "questions": fixtures.mock_questions(
+                int(payload.get("round", 1)), payload.get("cards") or []
+            )
+        }
     if task == "explain":
         return fixtures.mock_explain(
             payload.get("question") or {}, str(payload.get("user_answer", ""))
