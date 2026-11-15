@@ -36,7 +36,7 @@ $LineStretch  = "1.35"
 $CJKMainFont  = "SimSun"      # 正文中文
 $CJKSansFont  = "SimHei"      # 标题中文
 $CJKMonoFont  = "SimSun"      # 代码块里的中文
-$MonoFont     = "Consolas"    # 西文等宽
+$MonoFont     = "DejaVu Sans Mono"  # 西文等宽；Consolas 的 CMap 会把 - 抽成 U+2010
 $MermaidWidth = "11.5cm"
 $SequenceWidth = "13cm"
 
