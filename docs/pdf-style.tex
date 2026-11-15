@@ -6,7 +6,7 @@
 \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\},fontsize=\footnotesize}
 
 % 表格：字号小一档、行距收紧，窄页面下仍能放下 4–5 列
-\AtBeginEnvironment{longtable}{\footnotesize}
+\AtBeginEnvironment{longtable}{\small}
 \renewcommand{\arraystretch}{0.92}
 \setlength{\LTpre}{2pt}
 \setlength{\LTpost}{4pt}
@@ -19,6 +19,10 @@
 \captionsetup{font=small,labelfont=bf}
 \renewcommand{\figurename}{图}
 \renewcommand{\tablename}{表}
+
+% 图随文放置（默认 [tbp] 会把大图单独排成一页，留下整页空白）
+\usepackage{float}
+\floatplacement{figure}{H}
 
 % 段落间距略收紧（正文 10 pt + 1.35 倍行距已由 pandoc 变量设置）
 \setlength{\parskip}{2pt}

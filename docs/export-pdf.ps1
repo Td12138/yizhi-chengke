@@ -37,8 +37,8 @@ $CJKMainFont  = "SimSun"      # 正文中文
 $CJKSansFont  = "SimHei"      # 标题中文
 $CJKMonoFont  = "SimSun"      # 代码块里的中文
 $MonoFont     = "Consolas"    # 西文等宽
-$MermaidWidth = "14cm"
-$SequenceWidth = "14cm"
+$MermaidWidth = "11.5cm"
+$SequenceWidth = "13cm"
 
 function Resolve-Tool {
     param([string]$Explicit, [string]$Name, [string]$Hint)
@@ -94,7 +94,8 @@ if ($RenderMermaid) {
         & $Mmdc -i $mmd -o $png -b white -s 2 | Out-Null
         if (-not (Test-Path $png)) { throw "mermaid 渲染失败：fig-$index" }
         $width = if ($isSequence) { $SequenceWidth } else { $MermaidWidth }
-        "![图 $($script:index)](figs/fig-$($script:index).png){width=$width}"
+        $alt = if ($isSequence) { "命题—质检时序图" } else { "总架构图" }
+        "![$alt](figs/fig-$($script:index).png){width=$width}"
     })
     $sourceForPandoc = Join-Path $TempDir "技术文档.rendered.md"
     Set-Content -LiteralPath $sourceForPandoc -Value $text -Encoding utf8
