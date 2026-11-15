@@ -189,10 +189,11 @@ GitHub 上「错题本 / AI 出题」类项目不少，但**对生成内容的�
 
 | 提交物 | 位置 |
 |---|---|
-| 代码仓库 | 本仓库（Public） |
+| 代码仓库 | 本仓库（Public，MIT） |
 | README 复现指南 | 本文件 |
 | AI 对话快照 | `docs/ai-logs/`，索引见 `docs/ai-logs/README.md` |
 | 技术文档 | `docs/技术文档.pdf`（正文 `docs/技术文档.md`） |
+| 桌面版（可选） | [Releases](https://github.com/Td12138/yizhi-chengke/releases)：`一纸成课-win64.zip` 解压即用，`一纸成课-portable.exe` 单文件 |
 | 演示视频 | 随作品在赛事平台提交，不入库 |
 
 ## 红线
