@@ -25,6 +25,11 @@ export interface Card {
   body: string;
 }
 
+/** 卡片人工修正：只提交改动字段，未提交的字段由后端保留 */
+export type CardPatch = Partial<
+  Pick<Card, "title" | "summary" | "formula" | "body">
+>;
+
 export interface Question {
   id: number;
   stem_latex: string;

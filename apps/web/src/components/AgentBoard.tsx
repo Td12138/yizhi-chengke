@@ -21,6 +21,17 @@ const PHASE_LABEL: Record<string, string> = {
   error: "失败",
 };
 
+/** 状态符号：投影时颜色之外还能靠形状区分，避免色弱/远距离看不清 */
+const PHASE_MARK: Record<string, string> = {
+  idle: "○",
+  queued: "◔",
+  running: "◐",
+  delta: "◑",
+  done: "✓",
+  rejected: "✕",
+  error: "!",
+};
+
 export default function AgentBoard({
   board,
 }: {
@@ -31,11 +42,21 @@ export default function AgentBoard({
       {AGENTS.map((agent) => {
         const entry = board[agent.key];
         const phase = entry?.phase ?? "idle";
+        const label = PHASE_LABEL[phase] ?? phase;
         return (
-          <div key={agent.key} className={`agent agent-${phase}`}>
+          <div
+            key={agent.key}
+            className={`agent agent-${phase}`}
+            title={`${agent.label}：${label}`}
+          >
             <div className="agent-head">
               <span className="agent-name">{agent.label}</span>
-              <span className="agent-state">{PHASE_LABEL[phase]}</span>
+              <span className="agent-state">
+                <span className="agent-mark" aria-hidden="true">
+                  {PHASE_MARK[phase] ?? "○"}
+                </span>
+                {label}
+              </span>
             </div>
             <div className="agent-role">{agent.role}</div>
             <div className="agent-msg">{entry?.message || "—"}</div>
