@@ -1,0 +1,97 @@
+{
+  "name": "yizhi-chengke-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "一纸成课桌面版：Electron 外壳 + FastAPI 后端（Web 模式仍是主路径）",
+  "main": "main.js",
+  "license": "UNLICENSED",
+  "author": "YizhiChengke",
+  "scripts": {
+    "postinstall": "node build/ensure-electron.js",
+    "dev": "electron .",
+    "start": "electron .",
+    "dev:web": "npm --prefix ../web run dev",
+    "build:web": "npm --prefix ../web run build",
+    "build:runtime": "pwsh -NoProfile -ExecutionPolicy Bypass -File build/prepare_runtime.ps1",
+    "build:icon": "python build/make_icon.py",
+    "package:dir": "electron-builder --win --x64 --dir",
+    "package:zip": "pwsh -NoProfile -ExecutionPolicy Bypass -File build/package_zip.ps1",
+    "package": "npm run build:web && npm run build:runtime && electron-builder --win --x64",
+    "package:nsis": "npm run build:web && npm run build:runtime && electron-builder --win --x64 --config.win.target=nsis"
+  },
+  "devDependencies": {
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.td12137.yizhichengke",
+    "productName": "一纸成课",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "loading.html",
+      "error.html",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "runtime",
+        "to": "runtime",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../server/app",
+        "to": "server/app",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../server/run_server.py",
+        "to": "server/run_server.py"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "YizhiChengke-${version}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "YizhiChengke-${version}-portable.${ext}"
+    }
+  }
+}

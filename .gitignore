@@ -23,3 +23,8 @@ Desktop.ini
 .idea/
 .vscode/
 *.swp
+
+# ===== 桌面封装构建产物（不入库）=====
+apps/desktop/runtime/
+apps/desktop/release/
+apps/desktop/build/.cache/

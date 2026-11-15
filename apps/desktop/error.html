@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>一纸成课 · 启动失败</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f9fc;
+        --panel: #ffffff;
+        --panel-2: #f1f5fb;
+        --line: #dbe3ef;
+        --text: #1a2333;
+        --muted: #55647a;
+        --dim: #77869b;
+        --accent: #0f766e;
+        --accent-2: #0284c7;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(1200px 600px at 10% -10%, #e6f2ff 0%, var(--bg) 55%);
+        color: var(--text);
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+        padding: 32px;
+      }
+      main {
+        width: 100%;
+        max-width: 760px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 32px 36px;
+        box-shadow: 0 12px 40px rgba(26, 35, 51, 0.08);
+      }
+      h1 { margin: 0 0 8px; font-size: 24px; color: var(--text); }
+      .hint { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+      .detail {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 16px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--text);
+      }
+      .actions { display: flex; gap: 12px; margin-top: 20px; }
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 18px;
+        font-size: 14px;
+        cursor: pointer;
+        background: var(--accent);
+        color: #ffffff;
+      }
+      button.secondary {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+      details { margin-top: 18px; }
+      summary { cursor: pointer; color: var(--accent-2); font-size: 13px; }
+      pre {
+        margin: 10px 0 0;
+        max-height: 320px;
+        overflow: auto;
+        background: var(--panel-2);
+        color: #334155;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 16px;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="title">启动失败</h1>
+      <p class="hint">一纸成课桌面版没有完成启动。修复后重新打开本程序即可。</p>
+      <div class="detail" id="detail"></div>
+      <div class="actions">
+        <button id="open-log">查看日志</button>
+        <button class="secondary" id="quit">退出</button>
+      </div>
+      <details>
+        <summary>展开启动日志（便于排障）</summary>
+        <pre id="log"></pre>
+      </details>
+    </main>
+    <script>
+      const params = new URLSearchParams(location.search);
+      document.getElementById('title').textContent = params.get('title') || '启动失败';
+      document.getElementById('detail').textContent = params.get('detail') || '未知错误。';
+      const log = params.get('log') || '';
+      document.getElementById('log').textContent = log || '（无日志）';
+      document.getElementById('open-log').addEventListener('click', () => {
+        if (window.desktop) window.desktop.openLog();
+      });
+      document.getElementById('quit').addEventListener('click', () => {
+        if (window.desktop) window.desktop.quit();
+      });
+    </script>
+  </body>
+</html>
