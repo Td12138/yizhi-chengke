@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import AgentBoard, { AGENTS } from "./components/AgentBoard";
+import CameraCapture from "./components/CameraCapture";
 import CardEditor from "./components/CardEditor";
 import FunctionSlider from "./components/FunctionSlider";
 import MathText from "./components/MathText";
@@ -78,6 +79,7 @@ export default function App() {
   const [error, setError] = useState<RunError | null>(null);
   const [notice, setNotice] = useState("");
   const [preview, setPreview] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [requirement, setRequirement] = useState("给我出 5 道这页的变式题，中等难度");
   const [count, setCount] = useState(5);
   const [askQuery, setAskQuery] = useState("");
@@ -397,21 +399,30 @@ export default function App() {
                 上传并识别中… 看板第 2 栏显示进度
               </p>
             )}
-            <label className={`btn ${busy ? "btn-disabled" : ""}`}>
-              {busy === "ingest" ? "识别中…" : "选择图片或拍照"}
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                hidden
+            <div className="dropzone-actions">
+              <label className={`btn ${busy ? "btn-disabled" : ""}`}>
+                {busy === "ingest" ? "识别中…" : "选择图片"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={busy !== null}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void ingest(file);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn btn-ghost"
                 disabled={busy !== null}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file) void ingest(file);
-                }}
-              />
-            </label>
+                onClick={() => setCameraOpen(true)}
+              >
+                打开摄像头
+              </button>
+            </div>
           </div>
 
           <h3>
@@ -670,6 +681,16 @@ export default function App() {
           )}
         </section>
       </main>
+
+      {cameraOpen && (
+        <CameraCapture
+          onClose={() => setCameraOpen(false)}
+          onCapture={(file) => {
+            setCameraOpen(false);
+            void ingest(file);
+          }}
+        />
+      )}
     </div>
   );
 }

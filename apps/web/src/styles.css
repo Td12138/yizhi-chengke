@@ -136,7 +136,7 @@ body {
   display: grid;
   grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .panel {
@@ -793,7 +793,7 @@ body {
 .questions {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
   gap: 12px;
 }
 
@@ -1208,4 +1208,98 @@ body {
   .gen-row > .btn {
     width: 100%;
   }
+}
+
+/* ---------- 上传区动作行 ---------- */
+.dropzone-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-ghost {
+  background: #ffffff;
+  border-color: #c3cddd;
+  color: #0f766e;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: #0f766e;
+  background: #f0fdfa;
+}
+
+/* ---------- 拍照弹层 ---------- */
+.camera-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(26, 35, 51, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.camera-modal {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px 18px;
+  box-shadow: 0 24px 60px rgba(26, 35, 51, 0.25);
+}
+
+.camera-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.camera-head h3 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  color: var(--text);
+}
+
+.camera-video {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #eef2f8;
+  border: 1px solid var(--line);
+}
+
+.camera-error {
+  margin: 0;
+  padding: 18px;
+  border-radius: 12px;
+  background: #fdeeee;
+  border: 1px solid #e7b4b4;
+  color: #b42318;
+  font-size: var(--fs-sm);
+}
+
+.camera-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.camera-device {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.camera-hint {
+  margin: 10px 0 0;
+  color: var(--dim);
+  font-size: var(--fs-sm);
 }
