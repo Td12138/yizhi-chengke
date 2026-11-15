@@ -117,6 +117,63 @@ def list_cards(limit: int = 100) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_card(card_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM card WHERE id = ?", (card_id,)).fetchone()
+    return dict(row) if row else None
+
+
+# 允许人工修正的卡片字段：识别/萃取错了，只改内容，不改归属与时间戳
+CARD_PATCH_FIELDS = ("title", "summary", "formula", "body")
+
+
+def update_card(card_id: int, fields: dict) -> dict | None:
+    """按字段局部更新，返回更新后的完整卡片；卡片不存在返回 None。"""
+    allowed = {
+        key: value
+        for key, value in fields.items()
+        if key in CARD_PATCH_FIELDS and value is not None
+    }
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM card WHERE id = ?", (card_id,)).fetchone()
+        if row is None:
+            return None
+        if allowed:
+            assignments = ", ".join(f"{key} = ?" for key in allowed)
+            conn.execute(
+                f"UPDATE card SET {assignments} WHERE id = ?",
+                (*allowed.values(), card_id),
+            )
+        updated = conn.execute(
+            "SELECT * FROM card WHERE id = ?", (card_id,)
+        ).fetchone()
+    return dict(updated) if updated else None
+
+
+def get_source(source_id: int) -> dict | None:
+    """来源详情：raw_json 解析回版面块，便于原图与识别结果并排核对。"""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM source WHERE id = ?", (source_id,)
+        ).fetchone()
+    if row is None:
+        return None
+    source = dict(row)
+    try:
+        source["blocks"] = json.loads(source.get("raw_json") or "[]")
+    except json.JSONDecodeError:
+        source["blocks"] = []
+    return source
+
+
+def get_cards_by_source(source_id: int) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM card WHERE source_id = ? ORDER BY id ASC", (source_id,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_cards(card_ids: list[int]) -> list[dict]:
     if not card_ids:
         return []

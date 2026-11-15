@@ -22,9 +22,27 @@ def new_run_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+# 中文输入法常见的全角标点，判分前统一成半角（逗号要保留，不能直接删）
+FULLWIDTH_TABLE = str.maketrans(
+    {
+        "（": "(",
+        "）": ")",
+        "，": ",",
+        "：": ":",
+        "；": ";",
+        "。": ".",
+        "！": "!",
+        "？": "?",
+        "【": "[",
+        "】": "]",
+    }
+)
+
+
 def normalize(text: str) -> str:
-    """判分归一化：去掉空白、$、括号、反斜杠并统一小写。"""
-    return re.sub(r"[\s$\\({})\\\\]", "", str(text)).lower()
+    """判分归一化：全角标点转半角，去掉空白、$、括号、反斜杠并统一小写。"""
+    text = str(text).translate(FULLWIDTH_TABLE)
+    return re.sub(r"[\s$\\({})\\\\]", "", text).lower()
 
 
 def judge(question: dict, user_answer: str) -> bool:

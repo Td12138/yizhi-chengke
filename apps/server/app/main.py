@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import config, db
@@ -58,6 +58,15 @@ class AskRequest(BaseModel):
     query: str
 
 
+class CardPatch(BaseModel):
+    """人工修正卡片：只给要改的字段，缺省字段保持原值。"""
+
+    title: str | None = None
+    summary: str | None = None
+    formula: str | None = None
+    body: str | None = None
+
+
 @app.get("/api/health")
 async def health() -> dict:
     return {
@@ -99,6 +108,42 @@ async def events(run_id: str) -> StreamingResponse:
 @app.get("/api/cards")
 async def cards() -> dict:
     return {"cards": db.list_cards()}
+
+
+@app.patch("/api/cards/{card_id}")
+async def patch_card(card_id: int, req: CardPatch) -> dict:
+    """人工修正识别/萃取错误，返回更新后的完整卡片。"""
+    card = db.update_card(card_id, req.model_dump(exclude_none=True))
+    if card is None:
+        raise HTTPException(404, f"卡片 {card_id} 不存在")
+    return card
+
+
+@app.get("/api/sources/{source_id}")
+async def source_detail(source_id: int) -> dict:
+    """来源详情：识别原文块 + 该来源的卡片，用于原图与结果并排核对。"""
+    source = db.get_source(source_id)
+    if source is None:
+        raise HTTPException(404, f"来源 {source_id} 不存在")
+    return {
+        "id": source["id"],
+        "image_path": source["image_path"],
+        "created_at": source["created_at"],
+        "blocks": source["blocks"],
+        "cards": db.get_cards_by_source(source_id),
+    }
+
+
+@app.get("/api/sources/{source_id}/image")
+async def source_image(source_id: int) -> FileResponse:
+    source = db.get_source(source_id)
+    if source is None:
+        raise HTTPException(404, f"来源 {source_id} 不存在")
+    image_path = Path(source["image_path"])
+    if not image_path.is_file():
+        raise HTTPException(404, "原图文件已不存在")
+    mime = config.IMAGE_MIME_BY_SUFFIX.get(image_path.suffix.lower(), "image/png")
+    return FileResponse(image_path, media_type=mime)
 
 
 @app.get("/api/questions")

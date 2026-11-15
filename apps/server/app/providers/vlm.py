@@ -14,13 +14,7 @@ from .. import config
 from . import fixtures
 
 REQUEST_TIMEOUT = 120.0
-MIME_BY_SUFFIX = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-    ".bmp": "image/bmp",
-}
+MIME_BY_SUFFIX = config.IMAGE_MIME_BY_SUFFIX
 
 VLM_SYSTEM_PROMPT = (
     "你是版面识别器。把图片内容转成结构化块，输出 JSON："
@@ -38,8 +32,20 @@ async def recognize(image_path: Path) -> list[dict[str, Any]]:
 
 
 async def _remote(image_path: Path) -> list[dict[str, Any]]:
-    if not config.VLM_BASE_URL or not config.VLM_API_KEY:
-        raise RuntimeError("VLM_BASE_URL / VLM_API_KEY 未配置，无法使用非 mock 提供方")
+    missing = [
+        name
+        for name, value in (
+            ("VLM_BASE_URL", config.VLM_BASE_URL),
+            ("VLM_API_KEY", config.VLM_API_KEY),
+            ("VLM_MODEL", config.VLM_MODEL),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            f"{' / '.join(missing)} 未配置，无法使用 {config.VLM_PROVIDER} 提供方"
+            "（qwen / glm 会自动补地址与视觉模型，通常只需给 VLM_API_KEY）"
+        )
 
     mime = MIME_BY_SUFFIX.get(image_path.suffix.lower(), "image/png")
     encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")

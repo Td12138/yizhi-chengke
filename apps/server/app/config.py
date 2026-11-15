@@ -29,13 +29,52 @@ _load_dotenv(PROJECT_ROOT / ".env")
 VLM_PROVIDER = os.environ.get("VLM_PROVIDER", "mock").strip().lower()
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "mock").strip().lower()
 
-VLM_API_KEY = os.environ.get("VLM_API_KEY", "")
-VLM_BASE_URL = os.environ.get("VLM_BASE_URL", "")
-VLM_MODEL = os.environ.get("VLM_MODEL", "")
+# 已知 Provider 的缺省地址与模型名：只补「环境变量没显式设置」的那几项，
+# 密钥一律从 VLM_API_KEY / LLM_API_KEY 读，不在此处出现。
+PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+    "qwen": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "vlm_model": "qwen-vl-max",
+        "llm_model": "qwen-plus",
+    },
+    "glm": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "vlm_model": "glm-4v-plus",
+        "llm_model": "glm-4-plus",
+    },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/v1",
+        "llm_model": "deepseek-chat",
+    },
+}
 
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
-LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")
-LLM_MODEL = os.environ.get("LLM_MODEL", "")
+
+def provider_presets(provider: str) -> dict[str, str]:
+    """按 provider 名取缺省配置；未知 provider 返回空字典。"""
+    return dict(PROVIDER_PRESETS.get(provider.strip().lower(), {}))
+
+
+def resolve_provider_value(
+    provider: str,
+    preset_key: str,
+    env_key: str,
+    environ: dict[str, str] | None = None,
+) -> str:
+    """显式环境变量 > provider 缺省 > 空串（空串由调用方决定怎么报错）。"""
+    env = os.environ if environ is None else environ
+    explicit = (env.get(env_key) or "").strip()
+    if explicit:
+        return explicit
+    return provider_presets(provider).get(preset_key, "")
+
+
+VLM_API_KEY = os.environ.get("VLM_API_KEY", "").strip()
+VLM_BASE_URL = resolve_provider_value(VLM_PROVIDER, "base_url", "VLM_BASE_URL")
+VLM_MODEL = resolve_provider_value(VLM_PROVIDER, "vlm_model", "VLM_MODEL")
+
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "").strip()
+LLM_BASE_URL = resolve_provider_value(LLM_PROVIDER, "base_url", "LLM_BASE_URL")
+LLM_MODEL = resolve_provider_value(LLM_PROVIDER, "llm_model", "LLM_MODEL")
 
 # ---- 编排约束 ----
 VERIFY_MAX_RETRY = int(os.environ.get("VERIFY_MAX_RETRY", "2"))
@@ -57,6 +96,13 @@ CORS_ORIGINS = [
 
 # ---- 上传约束 ----
 ALLOWED_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+IMAGE_MIME_BY_SUFFIX = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+}
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 
 

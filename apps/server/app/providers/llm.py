@@ -73,8 +73,20 @@ def _mock(task: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _remote(task: str, payload: dict[str, Any]) -> dict[str, Any]:
-    if not config.LLM_BASE_URL or not config.LLM_API_KEY:
-        raise RuntimeError("LLM_BASE_URL / LLM_API_KEY 未配置，无法使用非 mock 提供方")
+    missing = [
+        name
+        for name, value in (
+            ("LLM_BASE_URL", config.LLM_BASE_URL),
+            ("LLM_API_KEY", config.LLM_API_KEY),
+            ("LLM_MODEL", config.LLM_MODEL),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            f"{' / '.join(missing)} 未配置，无法使用 {config.LLM_PROVIDER} 提供方"
+            "（qwen / glm / deepseek 会自动补地址与文本模型，通常只需给 LLM_API_KEY）"
+        )
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPTS[task]},
