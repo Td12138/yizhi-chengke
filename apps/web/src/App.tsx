@@ -98,6 +98,9 @@ export default function App() {
     getJSON<{ cards: Card[] }>("/api/cards")
       .then((data) => setCards(data.cards))
       .catch(() => undefined);
+    getJSON<{ questions: Question[] }>("/api/questions")
+      .then((data) => setQuestions(data.questions))
+      .catch(() => undefined);
     getJSON<{ vlm_provider: string; llm_provider: string }>("/api/health")
       .then(setHealth)
       .catch(() => undefined);
@@ -530,7 +533,7 @@ export default function App() {
                       {question.verified ? "✓ 已验算" : "! 未验算"}
                     </span>
                     <span className="q-id">#{question.id}</span>
-                    {question.verify_log && (
+                    {!question.verified && question.verify_log && (
                       <span className="q-verify">{question.verify_log}</span>
                     )}
                   </div>
