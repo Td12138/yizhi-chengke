@@ -21,6 +21,7 @@ import {
   postFile,
   postJSON,
   streamRun,
+  timeoutMsFor,
 } from "./api";
 import type {
   AgentEvent,
@@ -46,9 +47,10 @@ const AGENT_LABEL: Record<string, string> = {
 };
 const LETTERS = "ABCDEFGH";
 const MAX_LOGS = 200;
-/** 与 api.ts 的 RUN_TIMEOUT_MS 对齐，仅用于文案展示 */
-const RUN_TIMEOUT_S = 120;
 const NOTICE_MS = 4_000;
+/** 生成题数范围：与后端 /api/generate 的约束一致，输入框与提交都夹在这个区间 */
+const MIN_QUESTIONS = 1;
+const MAX_QUESTIONS = 12;
 /** 「最常被问」列表条数，与后端 /api/stats 的默认返回量对齐 */
 const TOP_ASKED = 10;
 /** 卡片区最多显示几张来源原图缩略（面板窄，多了要横向滚动） */
@@ -145,6 +147,17 @@ function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** 等待上限（秒）：与 api.ts 的按动作超时表同源，只用于文案展示 */
+function timeoutSecOf(kind: string): number {
+  return Math.round(timeoutMsFor(kind) / 1000);
+}
+
+/** 题数夹到 1–12：输入框清空（NaN）、手打 99 都不越界 */
+function clampCount(value: number): number {
+  if (!Number.isFinite(value)) return MIN_QUESTIONS;
+  return Math.min(MAX_QUESTIONS, Math.max(MIN_QUESTIONS, Math.round(value)));
+}
+
 /** 小写后缀（含点）；没有扩展名返回空串 */
 function suffixOf(name: string): string {
   const dot = name.lastIndexOf(".");
@@ -172,13 +185,13 @@ function checkUpload(file: File): UploadCheck {
   if (isDoc && file.size > MAX_DOC_BYTES) {
     return {
       ok: false,
-      message: `文件过大（${MAX_DOC_MB}MB）：文档上限 ${MAX_DOC_MB}MB，请压缩后再试`,
+      message: `文件过大（${(file.size / MB).toFixed(1)}MB）：文档上限 ${MAX_DOC_MB}MB，请压缩后再试`,
     };
   }
   if (isImage && file.size > MAX_IMAGE_BYTES) {
     return {
       ok: false,
-      message: `图片过大（${MAX_IMAGE_MB}MB）：图片上限 ${MAX_IMAGE_MB}MB，请压缩后再试`,
+      message: `图片过大（${(file.size / MB).toFixed(1)}MB）：图片上限 ${MAX_IMAGE_MB}MB，请压缩后再试`,
     };
   }
   return { ok: true, kind: isDoc ? "document" : "image" };
@@ -525,6 +538,7 @@ export default function App() {
   ) {
     if (busy) return;
     const label = ACTION_LABEL[kind] ?? kind;
+    const timeoutMs = timeoutMsFor(kind);
     const token = runToken.current + 1;
     runToken.current = token;
 
@@ -556,7 +570,7 @@ export default function App() {
       activeRun.current = runId;
       before?.();
       const outcome = await streamRun(runId, handleEvent, {
-        timeoutMs: RUN_TIMEOUT_S * 1000,
+        timeoutMs,
         onTick: (elapsedMs) => {
           if (runToken.current !== token) return;
           setRun((prev) => (prev && prev.active ? { ...prev, elapsedMs } : prev));
@@ -566,7 +580,7 @@ export default function App() {
       if (outcome.reason === "timeout") {
         failRun(
           `${label} · 等待结果`,
-          `超过 ${RUN_TIMEOUT_S} 秒仍未收到结束事件，已停止等待。可重试；若反复超时请查看后端日志。`,
+          `超过 ${timeoutSecOf(kind)} 秒仍未收到结束事件，已停止等待。后端可能仍在处理，稍后刷新可见；也可重试，反复超时请查看后端日志。`,
           token
         );
         return;
@@ -675,13 +689,18 @@ export default function App() {
   }
 
   async function generate() {
+    const trimmed = requirement.trim();
+    if (!trimmed) {
+      flash("先在输入框里写一句出题要求");
+      return;
+    }
     await execute(
       "generate",
       () =>
         postJSON<{ run_id: string }>("/api/generate", {
           card_ids: cards.map((card) => card.id),
-          requirement,
-          count,
+          requirement: trimmed,
+          count: clampCount(count),
         }),
       (last) => {
         const result = resultOf(last);
@@ -703,6 +722,8 @@ export default function App() {
         setResults({});
         setReviews({});
         setExplain(null);
+        // 新一套卷从 0 开始记驳回轮数，避免叠加上一套的「驳回 N 轮」
+        setVerifyRejects(0);
       }
     );
   }
@@ -760,6 +781,7 @@ export default function App() {
     if (reviews[questionId]?.status === "running") return;
 
     const label = ACTION_LABEL.review;
+    const timeoutMs = timeoutMsFor("review");
     const token = runToken.current + 1;
     runToken.current = token;
 
@@ -808,7 +830,7 @@ export default function App() {
           }
         },
         {
-          timeoutMs: RUN_TIMEOUT_S * 1000,
+          timeoutMs,
           onTick: (elapsedMs) => {
             if (runToken.current !== token) return;
             setRun((prev) =>
@@ -821,7 +843,7 @@ export default function App() {
       if (outcome.reason === "timeout") {
         failReview(
           questionId,
-          `超过 ${RUN_TIMEOUT_S} 秒仍未返回批改结果，已停止等待（可重试）`,
+          `超过 ${timeoutSecOf("review")} 秒仍未返回批改结果，已停止等待。后端可能仍在处理，稍后刷新可见；也可重试。`,
           token
         );
         return;
@@ -1088,7 +1110,7 @@ export default function App() {
               run={run}
               stages={stages}
               board={board}
-              timeoutSec={RUN_TIMEOUT_S}
+              timeoutSec={timeoutSecOf(run.kind)}
             />
           )}
           <AgentBoard board={board} />
@@ -1125,16 +1147,16 @@ export default function App() {
             <input
               className="num-input"
               type="number"
-              min={1}
-              max={12}
+              min={MIN_QUESTIONS}
+              max={MAX_QUESTIONS}
               value={count}
               disabled={busy !== null}
-              onChange={(event) => setCount(Number(event.target.value))}
+              onChange={(event) => setCount(clampCount(Number(event.target.value)))}
             />
             <button
               className="btn btn-primary"
               data-tour="generate"
-              disabled={busy !== null}
+              disabled={busy !== null || !requirement.trim()}
               onClick={() => void generate()}
             >
               {busy === "generate" ? "生成中…" : "生成练习卷"}
@@ -1309,7 +1331,7 @@ export default function App() {
           {explain ? (
             <>
               <h3 className="explain-title">{explain.data.title}</h3>
-              <FunctionSlider explain={explain.data} />
+              <FunctionSlider key={explain.qid} explain={explain.data} />
               <p className="explain-script">{explain.data.script}</p>
             </>
           ) : (

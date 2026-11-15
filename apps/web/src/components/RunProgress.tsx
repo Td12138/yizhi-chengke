@@ -16,9 +16,12 @@ export type RunInfo = {
 export type Board = Record<string, { phase: Status; message: string }>;
 
 const ACTIVE_PHASES: Status[] = ["queued", "running", "delta"];
-const FAILED_PHASES: Status[] = ["error", "rejected"];
+/** 真失败：只有 error 算失败；rejected 是质检驳回，随后会自动重跑 */
+const FAILED_PHASES: Status[] = ["error"];
+/** 驳回：单独黄灯提示，不计入失败，避免进度条先红一轮 */
+const WARN_PHASES: Status[] = ["rejected"];
 
-type StageState = "done" | "active" | "failed" | "pending";
+type StageState = "done" | "active" | "warn" | "failed" | "pending";
 
 function stageState(stage: Stage, board: Board): StageState {
   // 没有归属 Agent 的环节（如「上传」）随运行开始即算完成
@@ -31,12 +34,16 @@ function stageState(stage: Stage, board: Board): StageState {
   if (phases.some((phase) => phase && ACTIVE_PHASES.includes(phase))) {
     return "active";
   }
+  if (phases.some((phase) => phase && WARN_PHASES.includes(phase))) {
+    return "warn";
+  }
   return "pending";
 }
 
 const STATE_MARK: Record<StageState, string> = {
   done: "✓",
   active: "●",
+  warn: "!",
   failed: "✕",
   pending: "○",
 };
@@ -62,6 +69,8 @@ export default function RunProgress({
   const states = stages.map((stage) => stageState(stage, board));
   const doneCount = states.filter((state) => state === "done").length;
   const failed = run.failed || states.includes("failed");
+  // 只有「被驳回」没有「真失败」时走黄灯：整条进度不标红
+  const warned = !failed && states.includes("warn");
   const percent = Math.round((doneCount / Math.max(1, states.length)) * 100);
   const current =
     stages[states.findIndex((state) => state === "active")]?.label ?? "";
@@ -72,8 +81,19 @@ export default function RunProgress({
       ? `${run.label}失败`
       : `${run.label}完成`;
 
+  const progressClass = failed
+    ? "run-progress-failed"
+    : warned
+      ? "run-progress-warn"
+      : "";
+  const fillClass = failed
+    ? "run-bar-fill-bad"
+    : warned
+      ? "run-bar-fill-warn"
+      : "";
+
   return (
-    <div className={`run-progress ${failed ? "run-progress-failed" : ""}`}>
+    <div className={`run-progress ${progressClass}`}>
       <div className="run-progress-head">
         <span className="run-title">
           {title}
@@ -93,7 +113,7 @@ export default function RunProgress({
         aria-valuenow={percent}
       >
         <div
-          className={`run-bar-fill ${failed ? "run-bar-fill-bad" : ""}`}
+          className={`run-bar-fill ${fillClass}`}
           style={{ width: `${Math.max(percent, run.active ? 6 : 0)}%` }}
         />
       </div>

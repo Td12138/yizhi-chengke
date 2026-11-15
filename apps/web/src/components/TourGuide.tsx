@@ -175,9 +175,15 @@ export default function TourGuide({ open, paused = false, onClose }: Props) {
   const step = STEPS[index];
   const lastStep = index === STEPS.length - 1;
 
-  /** 走完 / 跳过统一出口：写标记 + 关引导 */
+  /** 走完 / 跳过统一出口：写标记 + 清掉 ?tour=1 + 关引导 */
   const finish = useCallback(() => {
     markTourDone();
+    // 桌面版首启会追加 ?tour=1；不清掉的话窗口一刷新就又弹一次引导
+    try {
+      window.history.replaceState(null, "", window.location.pathname);
+    } catch {
+      // 历史 API 不可用（极少见）时忽略，localStorage 标记仍然生效
+    }
     onClose();
   }, [onClose]);
 

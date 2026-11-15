@@ -7,8 +7,25 @@ import type {
   StatsData,
 } from "./types";
 
-/** 单次运行的等待上限，避免看板卡死 */
-const RUN_TIMEOUT_MS = 120_000;
+/**
+ * 单次运行的等待上限，按动作区分：上传识别要读整份文档（最长 10 分钟），
+ * 出题要跑命题 + 验算 + 驳回重跑（5 分钟），其余动作 2 分钟足够。
+ * 超时只是前端停止等待，后端任务可能仍在跑 —— 文案里要写清楚。
+ */
+const DEFAULT_RUN_TIMEOUT_MS = 120_000;
+const RUN_TIMEOUT_MS: Record<string, number> = {
+  ingest: 600_000,
+  generate: 300_000,
+  grade: DEFAULT_RUN_TIMEOUT_MS,
+  review: DEFAULT_RUN_TIMEOUT_MS,
+  ask: DEFAULT_RUN_TIMEOUT_MS,
+};
+
+/** 按动作取等待上限；未知动作走默认值 */
+export function timeoutMsFor(kind: string): number {
+  return RUN_TIMEOUT_MS[kind] ?? DEFAULT_RUN_TIMEOUT_MS;
+}
+
 /** 进度回调频率（毫秒） */
 const PROGRESS_TICK_MS = 1_000;
 /** 错误原文保留长度，避免整段堆栈糊满屏幕 */
@@ -160,7 +177,7 @@ export function streamRun(
   onEvent: (event: AgentEvent) => void,
   options: StreamOptions = {}
 ): Promise<StreamOutcome> {
-  const timeoutMs = options.timeoutMs ?? RUN_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
 
   return new Promise((resolve) => {
     const startedAt = Date.now();

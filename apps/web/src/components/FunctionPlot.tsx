@@ -182,13 +182,24 @@ export default function FunctionPlot({ expression, xMin = -6, xMax = 6 }: Props)
     try {
       fn = parseExpression(expression);
     } catch (err) {
+      if (err instanceof RangeError) {
+        // 括号 / 幂次嵌套过深时解析器自身也可能爆栈
+        return { error: "表达式嵌套过深，无法解析，请简化后再试" } as const;
+      }
       return { error: err instanceof Error ? err.message : String(err) } as const;
     }
 
     const points: { x: number; y: number }[] = [];
     for (let i = 0; i <= SAMPLES; i++) {
       const x = xMin + ((xMax - xMin) * i) / SAMPLES;
-      const y = fn(x);
+      let y: number;
+      try {
+        y = fn(x);
+      } catch (err) {
+        // 嵌套过深的表达式在求值时可能抛 RangeError（调用栈溢出）：整幅图按错误提示处理，不白屏
+        const reason = err instanceof RangeError ? "表达式嵌套过深" : "表达式求值失败";
+        return { error: `${reason}，无法绘制，请简化后再试` } as const;
+      }
       if (Number.isFinite(y)) points.push({ x, y });
     }
     if (points.length === 0) {

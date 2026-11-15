@@ -519,6 +519,31 @@ function isLocalOrigin(url) {
 }
 
 /**
+ * 导航判定：必须拿 origin 精确比较，backendUrl 自带端口。
+ * 用 startsWith 会放过 http://127.0.0.1:87101/ 这类「前缀相同、端口不同」的站点。
+ */
+function isBackendOrigin(url) {
+  if (typeof url !== 'string') return false;
+  try {
+    return new URL(url).origin === backendUrl;
+  } catch {
+    return false;
+  }
+}
+
+/** 归档附件（原图 / PDF / DOCX / 文本）路径：这些链接允许交给系统浏览器预览下载 */
+const ATTACHMENT_PATH_PREFIX = '/api/sources/';
+
+function isBackendAttachment(url) {
+  if (!isBackendOrigin(url)) return false;
+  try {
+    return new URL(url).pathname.startsWith(ATTACHMENT_PATH_PREFIX);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 摄像头权限：前端 CameraCapture 用 getUserMedia。
  * Electron 默认不弹系统授权框，不显式放行会静默失败。
  * 放行范围仅限 http://127.0.0.1:<port>（安全上下文），其余一律拒绝。
@@ -545,17 +570,56 @@ function setupPermissions() {
   });
 }
 
+/**
+ * 本机界面的 CSP：只给主文档加响应头，接口 / SSE / 静态资源原样返回。
+ * 与 Vite 开发服务器无关（dev 走 5173 的 HMR，不经过这里），因此不会破坏热更新。
+ */
+const APP_CSP = [
+  "default-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  "connect-src 'self'",
+  "frame-src 'self'",
+].join('; ');
+
+/**
+ * 后端用 FastAPI 直接托管构建产物，没有方便改头的地方，
+ * 这里在 Electron 侧补 CSP（只在主文档响应上加）。
+ */
+function setupCsp() {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (details.resourceType !== 'mainFrame' || !isBackendOrigin(details.url)) {
+      callback({ responseHeaders: details.responseHeaders });
+      return;
+    }
+    callback({
+      responseHeaders: {
+        ...(details.responseHeaders || {}),
+        'Content-Security-Policy': [APP_CSP],
+      },
+    });
+  });
+}
+
 /** 外部链接交给系统浏览器，窗口本身只承载本机界面。 */
 function attachNavigationHandlers(win) {
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    // 外部站点一律交给系统浏览器；本机后端的附件链接（PDF / DOCX 预览下载）同样交出去，
+    // 但同源的应用页面不开新窗口 —— 判定用 origin 精确比较，不用字符串前缀
+    if (/^https?:\/\//i.test(url) && (!isBackendOrigin(url) || isBackendAttachment(url))) {
+      shell.openExternal(url);
+    } else if (!isBackendOrigin(url)) {
+      log(`拦截新窗口：${url}`);
+    }
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(backendUrl) && !url.startsWith('file://')) {
-      event.preventDefault();
-      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-    }
+    // 应用自身的同源页面放行；file:// 留给本机错误页 / 加载页
+    if (isBackendOrigin(url) || url.startsWith('file://')) return;
+    event.preventDefault();
+    log(`拦截导航：${url}`);
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
   });
   win.webContents.on('did-fail-load', (event, code, desc, url) => {
     log(`页面加载失败 code=${code} desc=${desc} url=${url}`);
@@ -802,6 +866,7 @@ async function boot() {
   ];
 
   setupPermissions();
+  setupCsp();
 
   const firstRun = isFirstRun();
   log(`首次运行：${firstRun ? '是' : '否'}（标记 ${FIRST_RUN_PATH}）`);

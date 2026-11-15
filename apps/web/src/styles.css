@@ -535,6 +535,11 @@ body {
   border-color: #e2b3a8;
 }
 
+/* 质检驳回：黄灯提醒，不算失败 */
+.run-progress-warn {
+  border-color: #e0c48a;
+}
+
 .run-progress-head {
   display: flex;
   align-items: baseline;
@@ -587,6 +592,10 @@ body {
   background: linear-gradient(90deg, #b3372c, var(--bad));
 }
 
+.run-bar-fill-warn {
+  background: linear-gradient(90deg, #c98a12, var(--warn));
+}
+
 .run-stages {
   list-style: none;
   display: flex;
@@ -623,6 +632,14 @@ body {
   color: #a8332a;
   border-color: #e2b3a8;
   background: #fbeeea;
+  font-weight: 700;
+}
+
+/* 质检驳回：黄色加粗 + ! 记号，与真失败（红 ✕）区分 */
+.run-stage-warn {
+  color: var(--warn);
+  border-color: #e0c48a;
+  background: #fdf3dc;
   font-weight: 700;
 }
 
@@ -1605,6 +1622,42 @@ body {
   font-size: 1.05em;
 }
 
+/* ---------- 渲染崩溃兜底（ErrorBoundary） ---------- */
+.fatal {
+  max-width: 560px;
+  margin: 15vh auto 0;
+  padding: 24px 26px;
+  border: 1px solid #e2b3a8;
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  text-align: center;
+}
+
+.fatal h2 {
+  margin: 0 0 10px;
+  color: #a8332a;
+  font-size: 20px;
+}
+
+.fatal-summary {
+  margin: 0 0 16px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fbeeea;
+  color: #a8332a;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.fatal-hint {
+  margin: 14px 0 0;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+}
+
 /* ---------- 响应式 ---------- */
 
 /* 1440 及以上：默认两栏，左栏固定宽度上限 */
@@ -2208,6 +2261,63 @@ body {
   font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 文档类来源（PDF / DOCX / TXT / MD）：文件徽标 + 文件名，不走 <img> */
+.source-doc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f1e9da;
+  text-align: center;
+}
+
+.source-doc-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  word-break: break-all;
+}
+
+.source-doc-full {
+  aspect-ratio: auto;
+  align-items: stretch;
+  padding: 10px;
+}
+
+.source-doc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 10px;
+}
+
+.source-doc-open {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+/* PDF 内联预览：高度按弹层收，滚动交给 iframe 自己 */
+.source-doc-frame {
+  width: 100%;
+  height: min(62vh, 520px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
 }
 
 /* 原图 404 / 文件被删时的占位块 */
