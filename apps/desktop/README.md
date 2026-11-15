@@ -70,17 +70,28 @@ pwsh -File build/prepare_runtime.ps1 -Python "<宿主 python 路径>"
 
 ```
 双击 exe
-  └─ Electron 主进程立刻显示 loading.html（「正在启动本地服务…」）
+  └─ app.whenReady() 第一件事：createLoadingWindow()（不等后端、不探端口）
+       └─ loading.html 四步清单：准备运行时 → 启动本地服务 → 加载界面 → 完成
+            （每步 待办○/进行中●/完成✓/失败✕ + 耗时；顶部百分比 + 已用秒数，200ms 刷新）
        ├─ 探测 8710 → 8711 → 8712
        │    ├─ 已有同款后端（/api/health ok）→ 直接复用
-       │    └─ 被其他程序占用 → 顺延下一个端口
+       │    └─ 被其他程序占用 → 顺延下一个端口，加载页提示「8710 被占用，改用 8711」
        ├─ spawn resources/runtime/python/python.exe -m uvicorn app.main:app --port <实际端口>
        │    （cwd = resources/server，SERVE_WEB=1，WEB_DIST=resources/web）
-       ├─ 300ms 轮询 /api/health，15s 超时
-       │    ├─ 就绪 → loadURL(http://127.0.0.1:<实际端口>)（后端同时托管前端静态文件）
-       │    └─ 超时/退出 → error.html（错误原因 + 「查看日志」按钮）
+       ├─ 300ms 轮询 /api/health，40s 超时（portable 首次解压 + 实时防护扫描会慢）
+       │    ├─ 就绪 → 在隐藏窗口里 loadURL(http://127.0.0.1:<实际端口>)（后端同时托管前端静态文件）
+       │    │    └─ 自检 title/可见文字 → 通过后在加载页显示「完成」400ms → 切到主界面窗口
+       │    ├─ 超时 → error.html，带「再等 30 秒」按钮（继续轮询、不重启进程）
+       │    └─ 退出/界面空白 → error.html（错误原因 + 「查看日志」按钮）
        └─ 关窗 / 退出 → taskkill /T /F 进程树，连同 python.exe
 ```
+
+节奏控制（`main.js` 常量）：每步 active 至少 300ms（`STEP_MIN_ACTIVE_MS`）、「完成」至少 400ms
+（`DONE_HOLD_MS`）、总耗时不足 1.2s 时放慢到 1.2s（`MIN_STARTUP_PACING_MS`）；视觉更新走
+`queueVisual` 队列，不阻塞真实启动流程。
+
+首次运行：`%APPDATA%\yizhi-chengke-desktop\first-run.done` 不存在时，主界面 URL 追加 `?tour=1`；
+标记只在界面加载成功（自检通过）之后才写。
 
 前端 `fetch` 全部用相对路径 `/api/...`，所以换端口不需要改前端。
 
@@ -108,22 +119,39 @@ pwsh -File build/prepare_runtime.ps1 -Python "<宿主 python 路径>"
 
 | 产物 | 体积 | 说明 |
 |---|---|---|
-| `release/YizhiChengke-0.1.0-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **131.9 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
-| `release/一纸成课-win64.zip` | **196.6 MB** | `win-unpacked/` 整目录压缩，答辩现场推荐 |
-| `release/win-unpacked/一纸成课.exe` | 解压后 474 MB | 免安装目录版（Electron 358.6 MB + 内置 Python 115.3 MB） |
+| `release/YizhiChengke-0.1.0-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **144.8 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
+| `release/一纸成课-win64.zip` | **215.7 MB** | `win-unpacked/` 整目录压缩，答辩现场推荐 |
+| `release/win-unpacked/一纸成课.exe` | 解压后 512.5 MB | 免安装目录版（Electron 357.2 MB + 内置 Python 152.7 MB） |
 
-内置 Python 运行时单独 115.3 MB（sympy 约 55 MB，是最大头）。
+内置 Python 运行时单独 152.7 MB（sympy 约 69 MB；已剔除全部 `tests/` 目录，省 31 MB）。
+2026-11-15 的运行时重建补装了此前漏装的 `pymupdf / pypdf / python-docx`（`requirements.txt` 有、runtime 里没有，
+文档上传会 ImportError），因此体积比旧版大，属修复而非膨胀。
 
 ## 冷启动实测
 
-| 启动方式 | 到 `/api/health` 通过 | 到界面可交互 |
-|---|---|---|
-| Web 模式（仓库 venv） | ~1.2 s | 取决于 vite |
-| `win-unpacked/一纸成课.exe` | 1.16 s | **1.7 s** |
-| `一纸成课-portable.exe`（第二次启动） | 6.2 s（解压完成之后） | **35.4 s** |
-| `一纸成课-portable.exe`（首次启动） | 6.6 s | 41.6 s |
+| 启动方式 | 窗口出现 | 到 `/api/health` 通过 | 到界面可交互 |
+|---|---|---|---|
+| Web 模式（仓库 venv） | — | ~1.2 s | 取决于 vite |
+| `win-unpacked/一纸成课.exe` | **0.18 ~ 0.21 s** | 2.5 ~ 5.1 s | 3.9 ~ 6.4 s |
+| `一纸成课-portable.exe`（解压后） | 0.15 ~ 0.25 s | 12.9 s | 14.5 s |
+| `一纸成课-portable.exe`（含解压，实测） | **36 ~ 48 s** | — | 48.1 s |
 
-portable 慢在 **NSIS 自解压**：每次双击都要把 474 MB 解到 `%TEMP%`，本机实测约 31 s（Defender 实时扫描每个文件）。解压完成后 Electron 骨架立即出现，后端 6 s 左右就绪。**答辩现场建议用 zip 目录版**，双击 `一纸成课.exe` 约 1.7 s 进界面；portable 用于发给评委自行体验。最终构建复测（8710 被其他程序占用、自动顺延 8711）总耗时 47 s。
+窗口出现与后端无关：`app.whenReady()` 第一件事就开窗，实测 0.18~0.21 s 可见（目标 < 1.5 s）。
+后端就绪时间波动大（同一台机器 2.5~5.1 s），主要花在 Defender 首次扫描新解压的 152.7 MB 运行时与
+sympy/pymupdf 导入；第二次启动通常更快。
+
+### portable 的解压成本（已知限制）
+
+portable 是 NSIS 自解压：**每次双击都要把 512.5 MB 解到 `%TEMP%\<随机目录>`，退出时删除**。
+本机实测解压阶段 36~48 s，期间没有任何窗口，用户容易以为没反应——这是 NSIS 包装器的固有限制，
+主进程无法提前出窗。
+
+试过用固定解压目录复用（`"portable": { "unpackDirName": "yizhi-chengke-${version}" }`），实测：
+目录确实变成 `%TEMP%\yizhi-chengke-0.1.0` 并保留，但**第二次启动仍要 37.5 s**（时间戳显示目录被整个
+重写，electron-builder 每次都会重新解压），达不到「秒开」，因此**已回退该配置**。
+
+> **结论：主推 `一纸成课-win64.zip`（解压一次，之后双击 0.2 s 出窗、~5 s 进界面）。**
+> portable 仅用于发给评委自行体验，首次需要耐心等 40 s 左右；不存在可清理的缓存（临时目录退出即删）。
 
 ## 已验证（2026-11-15）
 
@@ -134,6 +162,7 @@ portable 慢在 **NSIS 自解压**：每次双击都要把 474 MB 解到 `%TEMP%
 | 内置 Python 独立跑后端 | `runtime/python/python.exe -m uvicorn app.main:app --port 8711` → health ok，冷启动 1.23 s |
 | Electron dev 开窗 | 日志 `界面自检：title=一纸成课`，DOM 非空 |
 | portable 双击 → 界面 | `界面自检` 通过，`/api/health` ok |
+| 打包版 PDF/DOCX 上传 | 内置运行时直接跑后端：`POST /api/ingest` 分别返回 `{"kind":"document"}`；DOCX 事件 `docx 直接解析：2 个段落/表格块`，PDF 事件 `文档共 1 页`（pymupdf 解析），无 ImportError |
 | 打包版端到端「上传 → 出题 → 判分 → 追问」 | 6 个 Agent 全部有名：recognize / extract / compose / verify / explain / retrieve，3 张卡片、3 道题 |
 | 端口占用顺延 | 8710 被占 → 自动用 8711，界面 1.68 s 就绪 |
 | 单实例锁 | 第二个进程立即退出（`second_exited=True`），不会抢端口 |

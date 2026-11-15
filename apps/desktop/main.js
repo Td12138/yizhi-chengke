@@ -4,11 +4,14 @@
  * 一纸成课桌面版主进程。
  *
  * 职责：
- *   1. 先出窗口骨架（loading.html），避免白屏等后端
- *   2. 在 8710 → 8711 → 8712 里选一个空闲端口，启动 FastAPI 后端
+ *   1. whenReady 第一件事就出窗口（loading.html），不等后端、不探端口
+ *   2. 把启动拆成四步并实时推给加载页：准备运行时 → 启动本地服务 → 加载界面 → 完成
+ *      （端口顺延、每步耗时、总耗时都在加载页可见，避免用户以为没反应）
+ *   3. 在 8710 → 8711 → 8712 里选一个空闲端口，启动 FastAPI 后端
  *      （dev：宿主 Python；打包：内置 embeddable Python）
- *   3. 轮询 /api/health，15s 内就绪则加载界面，否则显示可读错误页 + 查看日志
- *   4. 退出时 taskkill 进程树，确保不留 python.exe
+ *   4. 先在隐藏窗口里加载主界面，加载好再切换，切换前停留 200ms，避免闪跳
+ *   5. 首次运行标记：userData/first-run.done；首次加载主界面带 ?tour=1，成功后才写标记
+ *   6. 退出时 taskkill 进程树，确保不留 python.exe
  *
  * Web 模式（vite 5173 + 后端 8710）完全不受本文件影响。
  */
@@ -21,16 +24,48 @@ const net = require('node:net');
 const path = require('node:path');
 
 // ---- 常量（集中定义，正文只引用）----
+const PROCESS_START = Date.now(); // 进程启动基准（主进程模块最早可测点）
 const HOST = '127.0.0.1';
 const BASE_PORT = Number(process.env.APP_PORT || 8710);
 const PORT_ATTEMPTS = 3;
-const READY_TIMEOUT_MS = Number(process.env.YIZHI_READY_TIMEOUT_MS || 15000);
+const READY_TIMEOUT_MS = Number(process.env.YIZHI_READY_TIMEOUT_MS || 40000);
+// 40s 而不是 15s：portable 首次要解压 512 MB 到 %TEMP%，Windows 实时防护会逐个文件扫描，
+// 本机实测解压 + 首次导入就绪要 40~50s，15s 会直接把评委送进错误页。
 const POLL_INTERVAL_MS = 300;
 const HEALTH_TIMEOUT_MS = 1200;
 const PORT_PROBE_TIMEOUT_MS = 700;
 const LOG_TAIL_LINES = 40;
 const WINDOW_WIDTH = 1280;
 const WINDOW_HEIGHT = 860;
+const WINDOW_MIN_WIDTH = 960;
+const WINDOW_MIN_HEIGHT = 640;
+const SLOW_HINT_FIRST_MS = 12000; // 12s：首次解压运行时提示
+const SLOW_HINT_SECOND_MS = 25000; // 25s：仍在启动，引导看日志
+const EXTEND_WAIT_MS = 30000; // 错误页「再等 30 秒」延长窗口
+const DONE_HOLD_MS = 400; // 「完成」态至少停留时间，避免加载页闪跳
+const STEP_MIN_ACTIVE_MS = 300; // 每步 active 至少显示这么久，否则动画/文字来不及看清
+const MIN_STARTUP_PACING_MS = 1200; // 总耗时过短时把节奏放慢到这个长度
+const PAINT_WAIT_MS = 1500; // 切主界面前等首帧的兜底
+const FIRST_RUN_MARKER = 'first-run.done';
+const TOUR_QUERY = '?tour=1';
+const MIN_UI_TEXT_LEN = 80; // 主界面至少要有这么多可见文字，否则视为空白/报错页
+
+// 加载页步骤（顺序即展示顺序）
+const STEP_RUNTIME = 'runtime';
+const STEP_SERVER = 'server';
+const STEP_UI = 'ui';
+const STEP_DONE = 'done';
+const STEP_KEYS = [STEP_RUNTIME, STEP_SERVER, STEP_UI, STEP_DONE];
+const STEP_LABELS = {
+  [STEP_RUNTIME]: '准备运行时',
+  [STEP_SERVER]: '启动本地服务',
+  [STEP_UI]: '加载界面',
+  [STEP_DONE]: '完成',
+};
+const STATUS_PENDING = 'pending';
+const STATUS_ACTIVE = 'active';
+const STATUS_DONE = 'done';
+const STATUS_FAILED = 'failed';
 
 const IS_PACKAGED = app.isPackaged;
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -44,6 +79,7 @@ const RUNTIME_PYTHON = path.join(process.resourcesPath || '', 'runtime', 'python
 const DATA_DIR = IS_PACKAGED ? path.join(app.getPath('userData'), 'data') : '';
 const LOG_DIR = path.join(app.getPath('userData'), 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'desktop.log');
+const FIRST_RUN_PATH = path.join(app.getPath('userData'), FIRST_RUN_MARKER);
 const LOCAL_ORIGIN_PREFIX = `http://${HOST}:`;
 
 // 仅用于本机验证摄像头：设置 YIZHI_FAKE_MEDIA=1 时 Chromium 会用假摄像头
@@ -56,7 +92,8 @@ if (process.env.YIZHI_FAKE_MEDIA === '1') {
 }
 
 // ---- 运行状态 ----
-let mainWindow = null;
+let loadingWindow = null; // 加载页窗口（先出现，切换后销毁）
+let appWindow = null; // 主界面窗口（隐藏加载，加载成功后显示）
 let backend = null;
 let backendExit = null;
 let backendPort = BASE_PORT;
@@ -64,6 +101,36 @@ let backendUrl = `http://${HOST}:${BASE_PORT}`;
 let quitting = false;
 let startupStartedAt = 0;
 let logTail = [];
+
+// ---- 加载页进度状态 ----
+const progressSteps = STEP_KEYS.map((key) => ({
+  key,
+  label: STEP_LABELS[key],
+  status: STATUS_PENDING,
+  startedAt: null,
+  endedAt: null,
+  detail: '',
+}));
+let progressNote = '';
+let slowHintText = '';
+let slowHintTimers = [];
+let loadingPageReady = false;
+let startupReady = false;
+let activeStepKey = null;
+
+// 视觉队列：串行执行加载页的状态更新（含每步最小展示时长），与真实启动流程解耦
+let visualQueue = Promise.resolve();
+
+function queueVisual(task) {
+  visualQueue = visualQueue.then(task).catch(() => {
+    // 视觉更新失败不影响启动
+  });
+  return visualQueue;
+}
+
+function flushVisual() {
+  return visualQueue;
+}
 
 function timestamp() {
   return new Date().toISOString();
@@ -86,6 +153,10 @@ function tailText() {
   return logTail.join('\n');
 }
 
+function sinceStart() {
+  return Date.now() - PROCESS_START;
+}
+
 async function pathExists(target) {
   try {
     await fs.promises.access(target);
@@ -99,6 +170,122 @@ async function pathExists(target) {
 function resolvePythonCommand() {
   if (IS_PACKAGED) return RUNTIME_PYTHON;
   return process.env.YIZHI_PYTHON || 'python';
+}
+
+// ---- 加载页进度 ----
+
+function findStep(key) {
+  return progressSteps.find((step) => step.key === key);
+}
+
+function buildProgressPayload() {
+  return {
+    startedAt: PROCESS_START,
+    steps: progressSteps.map((step) => ({
+      key: step.key,
+      label: step.label,
+      status: step.status,
+      startedAt: step.startedAt,
+      endedAt: step.endedAt,
+      detail: step.detail,
+    })),
+    note: progressNote,
+    slowHint: slowHintText,
+  };
+}
+
+/** 把当前进度推给加载页（页面未就绪时先攒着，did-finish-load 后统一渲染）。 */
+function pushProgress() {
+  if (!loadingWindow || loadingWindow.isDestroyed() || loadingPageReady === false) return;
+  const json = JSON.stringify(buildProgressPayload()).replace(/</g, '\\u003c');
+  loadingWindow.webContents
+    .executeJavaScript(`window.__startup && window.__startup.render(${json})`)
+    .catch(() => {
+      // 页面正在导航/已销毁，忽略
+    });
+}
+
+function beginStep(key, detail) {
+  const step = findStep(key);
+  if (!step) return;
+  activeStepKey = key;
+  log(`[启动] ${step.label} …${detail ? `（${detail}）` : ''}`);
+  // 视觉更新走队列：保证上一段的「最小展示时长」先满足，但绝不阻塞真实启动流程
+  queueVisual(() => {
+    step.status = STATUS_ACTIVE;
+    step.startedAt = Date.now();
+    step.endedAt = null;
+    if (detail !== undefined) step.detail = detail;
+    pushProgress();
+  });
+}
+
+function endStep(key, detail) {
+  const step = findStep(key);
+  if (!step) return;
+  if (activeStepKey === key) activeStepKey = null;
+  queueVisual(async () => {
+    const startedAt = step.startedAt === null ? Date.now() : step.startedAt;
+    const shown = Date.now() - startedAt;
+    if (shown < STEP_MIN_ACTIVE_MS) {
+      await sleep(STEP_MIN_ACTIVE_MS - shown);
+    }
+    step.status = STATUS_DONE;
+    step.endedAt = Date.now();
+    if (detail !== undefined) step.detail = detail;
+    log(
+      `[启动] ${step.label} 完成，耗时 ${step.endedAt - startedAt} ms${detail ? `（${detail}）` : ''}`
+    );
+    pushProgress();
+  });
+}
+
+function failStep(key, message) {
+  const step = findStep(key);
+  if (!step) return;
+  if (activeStepKey === key) activeStepKey = null;
+  queueVisual(() => {
+    if (step.startedAt === null) step.startedAt = Date.now();
+    step.status = STATUS_FAILED;
+    step.endedAt = Date.now();
+    step.detail = message;
+    pushProgress();
+  });
+}
+
+function setNote(text) {
+  progressNote = text || '';
+  log(`[启动] 提示：${progressNote}`);
+  pushProgress();
+}
+
+function clearSlowHints() {
+  for (const timer of slowHintTimers) clearTimeout(timer);
+  slowHintTimers = [];
+}
+
+/** 回到加载页（用于「再等 30 秒」续等）。 */
+function showLoadingPage() {
+  if (!loadingWindow || loadingWindow.isDestroyed()) return;
+  loadingPageReady = false;
+  loadingWindow.loadFile(path.join(__dirname, 'loading.html'));
+}
+
+/** 用户选择续等：回到加载页，把「启动本地服务」重新置为进行中。 */
+function resumeWaiting(note) {
+  log(`继续等待：${note}`);
+  showLoadingPage();
+  queueVisual(() => {
+    const step = findStep(STEP_SERVER);
+    if (step) {
+      step.status = STATUS_ACTIVE;
+      step.startedAt = Date.now();
+      step.endedAt = null;
+      step.detail = '继续等待后端就绪…';
+    }
+    progressNote = note;
+    pushProgress();
+  });
 }
 
 function childEnv() {
@@ -174,7 +361,7 @@ async function spawnBackend() {
       return;
     }
     log(`后端意外退出（code=${code} signal=${signal}）`);
-    if (mainWindow && !mainWindow.isDestroyed()) {
+    if (startupReady) {
       showErrorPage(
         '后端已停止',
         '后端进程意外退出，界面无法继续使用。请关闭本窗口后重新启动。',
@@ -183,7 +370,7 @@ async function spawnBackend() {
     }
   });
 
-  return { child };
+  return { child, python };
 }
 
 function probePort(port) {
@@ -229,36 +416,101 @@ function sleep(ms) {
 }
 
 async function waitForBackend() {
-  const deadline = Date.now() + READY_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (backendExit) {
-      return {
-        ok: false,
-        reason: '后端进程启动失败或提前退出',
-        detail: backendExit.error || `exit code=${backendExit.code}`,
-      };
+  let deadline = Date.now() + READY_TIMEOUT_MS;
+  while (true) {
+    while (Date.now() < deadline) {
+      if (backendExit) {
+        return {
+          ok: false,
+          reason: '后端进程启动失败或提前退出',
+          detail: backendExit.error || `exit code=${backendExit.code}`,
+        };
+      }
+      const health = await probeHealth(backendPort);
+      if (health && health.ok) {
+        const elapsed = Date.now() - startupStartedAt;
+        log(`后端就绪，端口 ${backendPort}，耗时 ${elapsed} ms；health=${JSON.stringify(health)}`);
+        return { ok: true, health, elapsed };
+      }
+      await sleep(POLL_INTERVAL_MS);
     }
-    const health = await probeHealth(backendPort);
-    if (health && health.ok) {
-      const elapsed = Date.now() - startupStartedAt;
-      log(`后端就绪，端口 ${backendPort}，耗时 ${elapsed} ms；health=${JSON.stringify(health)}`);
-      return { ok: true, health, elapsed };
+
+    // 40s 到期：先给用户「再等 30 秒」的机会，同时后台继续探测 health
+    const decision = await waitForTimeoutDecision();
+    if (decision === 'ready') continue; // 期间后端就绪，下一轮立刻命中
+    if (decision === 'extend') {
+      resumeWaiting(`已按你的要求再等 ${EXTEND_WAIT_MS / 1000}s`);
+      deadline = Date.now() + EXTEND_WAIT_MS;
+      continue;
     }
-    await sleep(POLL_INTERVAL_MS);
+    return { ok: false, reason: `后端 ${READY_TIMEOUT_MS / 1000}s 内未就绪`, detail: '' };
   }
-  return { ok: false, reason: `后端 ${READY_TIMEOUT_MS / 1000}s 内未就绪`, detail: '' };
 }
 
-function showErrorPage(title, detail, logText) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.loadFile(path.join(__dirname, 'error.html'), {
-    query: {
-      title,
-      detail,
-      log: (logText || '').slice(-6000),
-      url: backendUrl,
-    },
+/**
+ * 超时决策：显示带「再等 30 秒」按钮的错误页，返回 'ready' | 'extend' | 'quit'。
+ * 不重启进程，只延长轮询窗口；期间每 300ms 继续探 health。
+ */
+function waitForTimeoutDecision() {
+  return new Promise((resolve) => {
+    let settled = false;
+    let poll = null;
+
+    const finish = (decision) => {
+      if (settled) return;
+      settled = true;
+      if (poll) clearInterval(poll);
+      ipcMain.removeListener('desktop:wait-more', onWaitMore);
+      ipcMain.removeListener('desktop:quit', onQuit);
+      log(`超时等待结束：${decision}`);
+      resolve(decision);
+    };
+
+    const onWaitMore = () => finish('extend');
+    const onQuit = () => finish('quit');
+    ipcMain.on('desktop:wait-more', onWaitMore);
+    ipcMain.on('desktop:quit', onQuit);
+
+    poll = setInterval(async () => {
+      if (settled) return;
+      const health = await probeHealth(backendPort);
+      if (health && health.ok) finish('ready');
+    }, POLL_INTERVAL_MS);
+
+    failStep(STEP_SERVER, `后端 ${READY_TIMEOUT_MS / 1000}s 内未就绪，仍在后台继续检测`);
+    showErrorPage(
+      '后端启动较慢',
+      [
+        `本地服务 ${READY_TIMEOUT_MS / 1000}s 内没有就绪，但它可能只是被实时防护拖慢了，并没有挂掉。`,
+        `点「再等 30 秒」会继续等待并轮询 /api/health，不用重启程序。`,
+        '',
+        `日志：${LOG_FILE}`,
+      ].join('\n'),
+      tailText(),
+      { waitMore: true }
+    );
   });
+}
+
+/** 当前可见窗口（错误页优先落在用户正在看的那个窗口）。 */
+function visibleWindow() {
+  if (appWindow && !appWindow.isDestroyed() && appWindow.isVisible()) return appWindow;
+  if (loadingWindow && !loadingWindow.isDestroyed()) return loadingWindow;
+  if (appWindow && !appWindow.isDestroyed()) return appWindow;
+  return null;
+}
+
+function showErrorPage(title, detail, logText, options) {
+  const target = visibleWindow();
+  if (!target) return;
+  const query = {
+    title,
+    detail,
+    log: (logText || '').slice(-6000),
+    url: backendUrl,
+  };
+  if (options && options.waitMore) query.waitMore = '1';
+  target.loadFile(path.join(__dirname, 'error.html'), { query });
 }
 
 /** 只认本机后端 origin（127.0.0.1）；绝不给 file:// 或外部站点放权。 */
@@ -293,14 +545,37 @@ function setupPermissions() {
   });
 }
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
+/** 外部链接交给系统浏览器，窗口本身只承载本机界面。 */
+function attachNavigationHandlers(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(backendUrl) && !url.startsWith('file://')) {
+      event.preventDefault();
+      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    }
+  });
+  win.webContents.on('did-fail-load', (event, code, desc, url) => {
+    log(`页面加载失败 code=${code} desc=${desc} url=${url}`);
+  });
+}
+
+/**
+ * 第一件事：把加载页窗口显示出来。
+ * show:true 立即出窗（背景色与加载页一致，不会白闪）——用户先看到窗口，再看到内容，
+ * 避免「双击了没反应」的错觉；冷启动时内容可能晚 0.5~1s 才画出来。
+ */
+function createLoadingWindow() {
+  loadingWindow = new BrowserWindow({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
-    minWidth: 960,
-    minHeight: 640,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
     show: true,
-    backgroundColor: '#0e1320',
+    center: true,
+    backgroundColor: '#f7f9fc',
     title: '一纸成课',
     autoHideMenuBar: true,
     webPreferences: {
@@ -310,34 +585,73 @@ function createWindow() {
       sandbox: true,
     },
   });
+  log(`加载窗口可见，距进程启动 ${sinceStart()} ms`);
 
-  // 立刻给出骨架，避免白屏
-  mainWindow.loadFile(path.join(__dirname, 'loading.html'));
+  loadingWindow.webContents.on('did-start-loading', () => {
+    loadingPageReady = false;
+  });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  loadingWindow.webContents.on('did-finish-load', () => {
+    loadingPageReady = true;
+    log(`加载页就绪，距进程启动 ${sinceStart()} ms`);
+    pushProgress();
+  });
+
+  attachNavigationHandlers(loadingWindow);
+
+  loadingWindow.on('closed', () => {
+    loadingWindow = null;
+    // 用户关掉加载页 = 不想再等；已切主界面时（startupReady）由主窗口接管
+    if (!startupReady) app.quit();
+  });
+
+  loadingWindow.loadFile(path.join(__dirname, 'loading.html'));
+  log(`加载窗口已创建，距进程启动 ${sinceStart()} ms`);
+}
+
+/** 主界面窗口：隐藏加载，加载好并切过去后才显示。 */
+function createAppWindow() {
+  const bounds = loadingWindow && !loadingWindow.isDestroyed() ? loadingWindow.getBounds() : null;
+  const win = new BrowserWindow({
+    width: bounds ? bounds.width : WINDOW_WIDTH,
+    height: bounds ? bounds.height : WINDOW_HEIGHT,
+    x: bounds ? bounds.x : undefined,
+    y: bounds ? bounds.y : undefined,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
+    show: false,
+    backgroundColor: '#0e1320',
+    title: '一纸成课',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      // 隐藏窗口不解码/不节流，保证切过去时已经渲染好
+      backgroundThrottling: false,
+    },
+  });
+
+  // 在创建时立刻挂 ready-to-show，避免加载太快错过
+  win.firstPaint = new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    win.once('ready-to-show', () => finish(true));
+    setTimeout(() => finish(false), PAINT_WAIT_MS);
+  });
+
+  win.on('closed', () => {
+    appWindow = null;
     app.quit();
   });
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    log(`页面加载完成：${mainWindow.webContents.getURL()}`);
-  });
-  mainWindow.webContents.on('did-fail-load', (event, code, desc, url) => {
-    log(`页面加载失败 code=${code} desc=${desc} url=${url}`);
-  });
-
-  // 外部链接交给系统浏览器，窗口本身只承载本机界面
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(backendUrl) && !url.startsWith('file://')) {
-      event.preventDefault();
-      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-    }
-  });
+  attachNavigationHandlers(win);
+  return win;
 }
 
 /**
@@ -363,57 +677,195 @@ async function pickPort() {
   return { port: null, reuse: false };
 }
 
-async function loadApp() {
+function isFirstRun() {
+  return !fs.existsSync(FIRST_RUN_PATH);
+}
+
+/** 首次运行标记只在主界面加载成功之后写，失败不算已用。 */
+function markFirstRunDone() {
   try {
-    await mainWindow.loadURL(backendUrl);
-    log(`窗口已加载 ${backendUrl}`);
-    const title = await mainWindow.webContents.executeJavaScript('document.title');
-    const textLen = await mainWindow.webContents.executeJavaScript('document.body.innerText.length');
+    fs.mkdirSync(path.dirname(FIRST_RUN_PATH), { recursive: true });
+    fs.writeFileSync(FIRST_RUN_PATH, `${new Date().toISOString()}\n`, 'utf8');
+    log(`已写首次运行标记：${FIRST_RUN_PATH}`);
+  } catch (err) {
+    log(`写首次运行标记失败：${err && err.message ? err.message : err}`);
+  }
+}
+
+async function loadApp(firstRun) {
+  const target = `${backendUrl}/${firstRun ? TOUR_QUERY : ''}`;
+  beginStep(STEP_UI, target);
+  log(`加载主界面：${target}${firstRun ? '（首次运行）' : ''}`);
+
+  appWindow = createAppWindow();
+  appWindow.webContents.on('did-finish-load', () => {
+    log(`主界面 did-finish-load：${appWindow ? appWindow.webContents.getURL() : ''}`);
+  });
+
+  try {
+    await appWindow.loadURL(target);
+  } catch (err) {
+    throw new StartupError(STEP_UI, `主界面加载失败：${err && err.message ? err.message : err}`);
+  }
+
+  const loadedUrl = appWindow.webContents.getURL();
+  if (!loadedUrl.startsWith(backendUrl)) {
+    throw new StartupError(STEP_UI, `主界面加载到了意外地址：${loadedUrl}`);
+  }
+
+  // 自检：确认渲染进程真的把页面画出来了
+  let title = '';
+  let textLen = 0;
+  try {
+    title = await appWindow.webContents.executeJavaScript('document.title');
+    textLen = await appWindow.webContents.executeJavaScript('document.body.innerText.length');
     log(`界面自检：title=${title} textLen=${textLen}`);
   } catch (err) {
-    showErrorPage('界面加载失败', String(err && err.message ? err.message : err), tailText());
+    log(`界面自检失败：${err && err.message ? err.message : err}`);
+    throw new StartupError(STEP_UI, `界面渲染异常：${err && err.message ? err.message : err}`);
+  }
+
+  // 空白/JSON 报错页说明这个端口上的服务不是本应用的版本（常见于复用了别的进程）
+  if (!String(title || '').trim() || textLen < MIN_UI_TEXT_LEN) {
+    throw new StartupError(
+      STEP_UI,
+      [
+        `界面内容异常（title="${title}"，可见文字 ${textLen} 字）。`,
+        `端口 ${backendPort} 上的服务可能不是本应用的版本。`,
+        '请关闭占用该端口的程序后重新启动：',
+        `  netstat -ano | findstr :${backendPort}`,
+      ].join('\n')
+    );
+  }
+
+  endStep(STEP_UI, `已渲染：${title}`);
+  return { title, textLen };
+}
+
+class StartupError extends Error {
+  constructor(stepKey, message) {
+    super(message);
+    this.stepKey = stepKey;
+  }
+}
+
+async function finishStartup(win) {
+  beginStep(STEP_DONE, '正在进入主界面');
+  await flushVisual(); // 等「完成」这一行真正画出来
+  await sleep(DONE_HOLD_MS); // 至少停留 400ms，避免一闪而过
+  endStep(STEP_DONE, '');
+  await flushVisual();
+
+  // 整体节奏：真实启动很快时也放慢到 1.2s，别让四步像闪屏
+  const elapsed = sinceStart();
+  if (elapsed < MIN_STARTUP_PACING_MS) {
+    await sleep(MIN_STARTUP_PACING_MS - elapsed);
+  }
+
+  startupReady = true;
+  clearSlowHints();
+
+  const painted = await win.firstPaint;
+  log(`主界面首帧${painted ? '已就绪' : '等待超时（强制显示）'}`);
+
+  win.show();
+  win.focus();
+  log(`主界面可见，距进程启动 ${sinceStart()} ms`);
+
+  if (loadingWindow && !loadingWindow.isDestroyed()) {
+    loadingWindow.destroy();
   }
 }
 
 async function boot() {
+  log(`app ready，距进程启动 ${sinceStart()} ms`);
+
+  // 1) 先出窗口，绝不等后端
+  createLoadingWindow();
+
+  // 2) 进度条的第一步：进程一起来就算「准备运行时」
+  beginStep(STEP_RUNTIME, IS_PACKAGED ? '内置运行时' : '宿主 Python');
+
+  slowHintTimers = [
+    setTimeout(() => {
+      if (startupReady) return;
+      slowHintText = '首次启动需要解压运行时，可能比平时慢一倍，请再等一会儿';
+      log(`启动已超过 ${SLOW_HINT_FIRST_MS} ms，显示首次解压提示`);
+      pushProgress();
+    }, SLOW_HINT_FIRST_MS),
+    setTimeout(() => {
+      if (startupReady) return;
+      slowHintText = '仍在启动，如果超过 1 分钟请点『查看日志』';
+      log(`启动已超过 ${SLOW_HINT_SECOND_MS} ms，显示「查看日志」提示`);
+      pushProgress();
+    }, SLOW_HINT_SECOND_MS),
+  ];
+
   setupPermissions();
-  createWindow();
 
-  const picked = await pickPort();
-  if (!picked.port) {
-    const msg = [
-      `端口 ${BASE_PORT}-${BASE_PORT + PORT_ATTEMPTS - 1} 均被占用，无法启动本地服务。`,
-      '请关闭占用端口的程序后重试：',
-      `  netstat -ano | findstr :${BASE_PORT}`,
-    ].join('\n');
-    log(msg);
-    showErrorPage('端口被占用', msg, tailText());
-    return;
+  const firstRun = isFirstRun();
+  log(`首次运行：${firstRun ? '是' : '否'}（标记 ${FIRST_RUN_PATH}）`);
+
+  try {
+    // ---- 准备运行时 ----
+    const python = resolvePythonCommand();
+    const pythonOk = IS_PACKAGED ? await pathExists(python) : true;
+    if (!pythonOk) {
+      throw new StartupError(STEP_RUNTIME, `找不到内置 Python：${python}\n请重新解压/安装桌面版。`);
+    }
+    endStep(STEP_RUNTIME, IS_PACKAGED ? '内置 Python 3.14' : python);
+
+    // ---- 启动本地服务 ----
+    beginStep(STEP_SERVER, '正在选择端口');
+    const picked = await pickPort();
+    if (!picked.port) {
+      throw new StartupError(
+        STEP_SERVER,
+        [
+          `端口 ${BASE_PORT}-${BASE_PORT + PORT_ATTEMPTS - 1} 均被占用，无法启动本地服务。`,
+          '请关闭占用端口的程序后重试：',
+          `  netstat -ano | findstr :${BASE_PORT}`,
+        ].join('\n')
+      );
+    }
+    backendPort = picked.port;
+    backendUrl = `http://${HOST}:${backendPort}`;
+
+    if (picked.port !== BASE_PORT) {
+      setNote(`${BASE_PORT} 被占用，改用 ${picked.port}`);
+    }
+
+    if (picked.reuse) {
+      setNote(`${picked.port} 上已有本地服务在运行，直接复用`);
+      endStep(STEP_SERVER, `复用 ${backendUrl}`);
+    } else {
+      beginStep(STEP_SERVER, `正在启动 127.0.0.1:${backendPort}`);
+      const started = await spawnBackend();
+      if (started.error) {
+        throw new StartupError(STEP_SERVER, started.error);
+      }
+      const ready = await waitForBackend();
+      if (!ready.ok) {
+        throw new StartupError(STEP_SERVER, `${ready.reason}\n${ready.detail || ''}\n\n日志：${LOG_FILE}`);
+      }
+      endStep(STEP_SERVER, `${backendUrl}（${ready.elapsed} ms）`);
+    }
+
+    // ---- 加载界面 ----
+    await loadApp(firstRun);
+
+    // ---- 完成：首次标记在界面加载成功之后才写 ----
+    if (firstRun) markFirstRunDone();
+    await finishStartup(appWindow);
+  } catch (err) {
+    const stepKey = err instanceof StartupError ? err.stepKey : activeStepKey || STEP_RUNTIME;
+    const message = err && err.stack ? err.stack : String(err);
+    log(`启动失败：${message}`);
+    failStep(stepKey, err && err.message ? err.message : String(err));
+    clearSlowHints();
+    await flushVisual(); // 先让失败态显示出来，再切错误页
+    showErrorPage('启动失败', err && err.message ? err.message : String(err), tailText());
   }
-  backendPort = picked.port;
-  backendUrl = `http://${HOST}:${backendPort}`;
-
-  if (picked.reuse) {
-    await loadApp();
-    return;
-  }
-
-  const started = await spawnBackend();
-  if (started.error) {
-    log(started.error);
-    showErrorPage('后端无法启动', started.error, tailText());
-    return;
-  }
-
-  const ready = await waitForBackend();
-  if (!ready.ok) {
-    const msg = `${ready.reason}\n${ready.detail || ''}\n\n日志：${LOG_FILE}`;
-    log(msg);
-    showErrorPage('后端启动失败', msg, tailText());
-    return;
-  }
-
-  await loadApp();
 }
 
 function killBackend() {
@@ -446,10 +898,10 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+    const target = visibleWindow();
+    if (!target) return;
+    if (target.isMinimized()) target.restore();
+    target.focus();
   });
 
   app.setAppUserModelId('com.td12137.yizhichengke');

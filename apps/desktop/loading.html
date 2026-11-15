@@ -2,7 +2,10 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
     <title>一纸成课 · 正在启动</title>
     <style>
       :root {
@@ -16,61 +19,344 @@
         --dim: #77869b;
         --accent: #0f766e;
         --accent-2: #0284c7;
+        --ok: #15803d;
+        --bad: #b91c1c;
+        --warn-bg: #fff7ed;
+        --warn-line: #fdba74;
+        --warn-text: #9a3412;
       }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
       html, body { height: 100%; margin: 0; }
       body {
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 18px;
-        background: radial-gradient(1200px 600px at 10% -10%, #e6f2ff 0%, var(--bg) 55%);
+        padding: 24px;
+        background: var(--bg);
         color: var(--text);
         font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
       }
-      .brand {
-        font-size: 30px;
-        font-weight: 600;
-        letter-spacing: 2px;
-        color: var(--text);
+      main {
+        width: 100%;
+        max-width: 620px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 30px 34px 22px;
+        box-shadow: 0 14px 44px rgba(26, 35, 51, 0.09);
       }
-      .spinner {
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        border: 3px solid rgba(15, 118, 110, 0.15);
-        border-top-color: var(--accent);
-        animation: spin 0.9s linear infinite;
+      .brand { font-size: 26px; font-weight: 600; letter-spacing: 2px; }
+      .lead { margin: 8px 0 18px; color: var(--muted); font-size: 14px; }
+      .note {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        margin: 0 0 14px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-line);
+        color: var(--warn-text);
+        font-size: 13px;
+        line-height: 1.5;
       }
-      .hint { color: var(--muted); font-size: 14px; }
-      .sub { color: var(--dim); font-size: 12px; }
+      .note::before { content: "!"; font-weight: 700; }
+
+      /* 文字进度：不依赖动画也能看出「在动」 */
+      .progress { margin: 0 0 16px; }
       .bar {
-        width: 220px;
-        height: 4px;
+        height: 6px;
         border-radius: 999px;
         background: var(--line);
         overflow: hidden;
       }
       .bar > i {
         display: block;
-        width: 40%;
+        width: 0%;
         height: 100%;
         border-radius: inherit;
         background: linear-gradient(90deg, var(--accent), var(--accent-2));
-        animation: slide 1.4s ease-in-out infinite;
+        transition: width 200ms ease-out;
       }
+      .progress-meta {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .progress-meta .pct { min-width: 44px; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+      .steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        border-top: 1px solid var(--line);
+      }
+      .step {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 46px;
+        min-height: 32px;
+        padding: 0 2px;
+        border-bottom: 1px solid var(--line);
+        font-size: 15px;
+        line-height: 1.4;
+      }
+      .glyph {
+        flex: 0 0 20px;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        font-size: 14px;
+        color: var(--dim);
+      }
+      /* 转圈：固定盒模型的 CSS 边框环，绝不使用文字字符；节点只创建一次，靠 visibility + play-state 切换 */
+      .spinner {
+        display: block;
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        border: 2px solid #e2d8c6;
+        border-top-color: var(--accent);
+        transform-origin: 50% 50%;
+        will-change: transform;
+        animation: spin 0.8s linear infinite;
+        animation-play-state: paused;
+        visibility: hidden;
+      }
+      .step[data-status="active"] .spinner {
+        visibility: visible;
+        animation-play-state: running;
+      }
+      .mark { line-height: 1; }
+      .step[data-status="active"] .mark { visibility: hidden; }
+      .step[data-status="done"] .mark { color: var(--ok); }
+      .step[data-status="failed"] .mark { color: var(--bad); }
+      .label { flex: 1 1 auto; color: var(--muted); }
+      .meta {
+        flex: 0 1 auto;
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        min-width: 0;
+      }
+      .detail {
+        max-width: 220px;
+        color: var(--dim);
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .time {
+        min-width: 40px;
+        text-align: right;
+        color: var(--dim);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .step[data-status="active"] .label { color: var(--text); font-weight: 500; }
+      .step[data-status="done"] .label { color: var(--text); }
+      .step[data-status="done"] .glyph { color: var(--ok); }
+      .step[data-status="failed"] .label { color: var(--bad); font-weight: 500; }
+      .step[data-status="failed"] .glyph { color: var(--bad); }
+      .step[data-status="failed"] .detail { color: var(--bad); }
+
+      .slow {
+        margin: 14px 0 0;
+        color: var(--dim);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: baseline;
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .foot .total { color: var(--text); font-variant-numeric: tabular-nums; }
+      .foot .sep { color: var(--line); }
       @keyframes spin { to { transform: rotate(360deg); } }
-      @keyframes slide {
-        0% { transform: translateX(-30%); }
-        100% { transform: translateX(260%); }
+
+      /* 系统「减少动态效果」：停掉转圈，改用静态圆点 + 文字百分比 */
+      @media (prefers-reduced-motion: reduce) {
+        .spinner { display: none !important; }
+        .step[data-status="active"] .mark { visibility: visible; }
+        .step[data-status="active"] .mark::before { content: "●"; color: var(--accent); }
+        .bar > i { transition: none; }
       }
     </style>
   </head>
-  <body>
-    <div class="brand">一纸成课</div>
-    <div class="spinner"></div>
-    <div class="hint">正在启动本地服务…</div>
-    <div class="bar"><i></i></div>
-    <div class="sub">正在初始化后端与本地数据，通常几秒</div>
+  <body style="background: #f7f9fc">
+    <main>
+      <div class="brand">一纸成课</div>
+      <p class="lead">正在准备本地服务，请稍候（首次启动需要解压运行时，会慢一些）</p>
+
+      <p class="note" id="note" hidden></p>
+
+      <div class="progress">
+        <div class="bar"><i id="bar"></i></div>
+        <div class="progress-meta">
+          <span class="pct" id="pct">0%</span>
+          <span id="elapsed">已用 0.0s</span>
+        </div>
+      </div>
+
+      <ul class="steps" id="steps">
+        <li class="step" data-key="runtime" data-status="pending">
+          <span class="glyph"><span class="spinner"></span><span class="mark">○</span></span><span class="label">准备运行时</span>
+          <span class="meta"><span class="detail"></span><span class="time"></span></span>
+        </li>
+        <li class="step" data-key="server" data-status="pending">
+          <span class="glyph"><span class="spinner"></span><span class="mark">○</span></span><span class="label">启动本地服务</span>
+          <span class="meta"><span class="detail"></span><span class="time"></span></span>
+        </li>
+        <li class="step" data-key="ui" data-status="pending">
+          <span class="glyph"><span class="spinner"></span><span class="mark">○</span></span><span class="label">加载界面</span>
+          <span class="meta"><span class="detail"></span><span class="time"></span></span>
+        </li>
+        <li class="step" data-key="done" data-status="pending">
+          <span class="glyph"><span class="spinner"></span><span class="mark">○</span></span><span class="label">完成</span>
+          <span class="meta"><span class="detail"></span><span class="time"></span></span>
+        </li>
+      </ul>
+
+      <p class="slow" id="slow" hidden>如果你的电脑启用了实时防护，首次启动可能被扫描拖慢</p>
+
+      <div class="foot">
+        <span class="total" id="total">总耗时 0.0s</span>
+        <span class="sep">·</span>
+        <span>首次启动较慢，之后会快很多</span>
+      </div>
+    </main>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var MARK = { pending: '○', active: '', done: '✓', failed: '✕' };
+        var TICK_MS = 200; // 百分比/秒数刷新间隔（文字更新，不做动画）
+        var SLICE = 100 / 4; // 四步，每步占 25%
+        var ACTIVE_FULL_MS = 1200; // 单步进入 active 后多久显示到该段的 90%
+        var state = null;
+        var rows = {};
+        var cache = {};
+
+        var stepEls = document.querySelectorAll('.step');
+        for (var i = 0; i < stepEls.length; i += 1) {
+          var el = stepEls[i];
+          rows[el.getAttribute('data-key')] = {
+            el: el,
+            mark: el.querySelector('.mark'),
+            detail: el.querySelector('.detail'),
+            time: el.querySelector('.time'),
+          };
+        }
+
+        function fmt(ms) {
+          if (ms === null || ms === undefined || isNaN(ms)) return '';
+          return (ms / 1000).toFixed(1) + 's';
+        }
+
+        function setText(node, value) {
+          if (node && node.textContent !== value) node.textContent = value;
+        }
+
+        function stepElapsed(step) {
+          if (!step.startedAt) return null;
+          return (step.endedAt || Date.now()) - step.startedAt;
+        }
+
+        function percent() {
+          if (!state) return 0;
+          var total = 0;
+          for (var i = 0; i < state.steps.length; i += 1) {
+            var step = state.steps[i];
+            if (step.status === 'done' || step.status === 'failed') {
+              total += SLICE;
+            } else if (step.status === 'active' && step.startedAt) {
+              var ratio = Math.min(0.9, (Date.now() - step.startedAt) / ACTIVE_FULL_MS);
+              total += SLICE * ratio;
+            }
+          }
+          return Math.max(0, Math.min(100, total));
+        }
+
+        // 只改 textContent / dataset / 属性，绝不重建 DOM，避免重启 CSS 动画
+        function paintRow(step) {
+          var row = rows[step.key];
+          if (!row) return;
+          if (row.el.getAttribute('data-status') !== step.status) {
+            row.el.setAttribute('data-status', step.status);
+          }
+          // 只改文字节点；spinner 节点不动，动画不会重启
+          setText(row.mark, step.status === 'active' ? '' : MARK[step.status] || '○');
+          setText(row.detail, step.detail || '');
+          setText(row.time, fmt(stepElapsed(step)));
+        }
+
+        function paint() {
+          if (!state) return;
+
+          for (var i = 0; i < state.steps.length; i += 1) paintRow(state.steps[i]);
+
+          var noteEl = document.getElementById('note');
+          if (state.note) {
+            setText(noteEl, state.note);
+            noteEl.hidden = false;
+          } else {
+            noteEl.hidden = true;
+          }
+
+          var slowEl = document.getElementById('slow');
+          if (state.slowHint) {
+            setText(slowEl, state.slowHint);
+            slowEl.hidden = false;
+          } else {
+            slowEl.hidden = true;
+          }
+
+          var pct = percent();
+          var shown = pct >= 100 ? 100 : Math.floor(pct);
+          setText(document.getElementById('pct'), shown + '%');
+          var bar = document.getElementById('bar');
+          var width = shown + '%';
+          if (cache.width !== width) {
+            bar.style.width = width;
+            cache.width = width;
+          }
+
+          if (state.startedAt) {
+            var used = Date.now() - state.startedAt;
+            setText(document.getElementById('elapsed'), '已用 ' + fmt(used));
+            setText(document.getElementById('total'), '总耗时 ' + fmt(used));
+          }
+        }
+
+        // 主进程通过 executeJavaScript 调用：window.__startup.render(payload)
+        window.__startup = {
+          render: function (payload) {
+            if (payload) state = payload;
+            paint();
+          },
+        };
+
+        setInterval(paint, TICK_MS);
+      })();
+    </script>
   </body>
 </html>
+
