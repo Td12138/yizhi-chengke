@@ -72,10 +72,14 @@ class CardPatch(BaseModel):
 
 @app.get("/api/health")
 async def health() -> dict:
+    status = config.provider_status()
     return {
         "ok": True,
         "vlm_provider": config.VLM_PROVIDER,
         "llm_provider": config.LLM_PROVIDER,
+        "vlm_ready": status["vlm_ready"],
+        "llm_ready": status["llm_ready"],
+        "ready": status["vlm_ready"] and status["llm_ready"],
     }
 
 

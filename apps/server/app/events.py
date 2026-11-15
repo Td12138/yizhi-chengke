@@ -10,6 +10,8 @@ from typing import Any, AsyncIterator
 
 # 单次运行保留的事件上限，防止长时间运行占内存
 MAX_EVENTS_PER_RUN = 500
+# 保留的运行数上限：超过就回收已结束的 run（SSE 若仍在读，对象仍在内存里，不受影响）
+MAX_RUNS = 50
 # SSE 保活间隔（秒），避免中间层断流
 KEEPALIVE_SECONDS = 15.0
 
@@ -56,9 +58,19 @@ class EventBus:
         self._runs: dict[str, Run] = {}
 
     def create(self, run_id: str) -> Run:
+        self._prune()
         run = Run(run_id)
         self._runs[run_id] = run
         return run
+
+    def _prune(self) -> None:
+        """只回收已结束的 run，保证长时间运行不无限增长。"""
+        if len(self._runs) < MAX_RUNS:
+            return
+        for old_id in [rid for rid, run in self._runs.items() if run.closed]:
+            if len(self._runs) < MAX_RUNS:
+                break
+            del self._runs[old_id]
 
     def get(self, run_id: str) -> Run | None:
         return self._runs.get(run_id)

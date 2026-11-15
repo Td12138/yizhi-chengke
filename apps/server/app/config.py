@@ -151,3 +151,11 @@ MAX_DOC_CHARS = 20000
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def provider_status() -> dict:
+    """provider 是否具备运行条件：mock 恒就绪，真实模型要求有 key。"""
+    return {
+        "vlm_ready": VLM_PROVIDER == "mock" or bool(VLM_API_KEY),
+        "llm_ready": LLM_PROVIDER == "mock" or bool(LLM_API_KEY),
+    }
