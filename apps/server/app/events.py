@@ -22,6 +22,7 @@ AGENT_LABELS = {
     "verify": "质检",
     "explain": "讲解",
     "retrieve": "检索",
+    "review": "批改",
     "orchestrator": "编排",
 }
 

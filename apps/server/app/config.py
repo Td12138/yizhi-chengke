@@ -83,6 +83,10 @@ QUESTION_MIN = 1
 QUESTION_MAX = 12
 DEFAULT_QUESTION_COUNT = 5
 RAG_TOP_K = 3
+# 逐条推送节奏（秒）：出题一条一题、卡片一张一条，给前端留出逐条出现的时间
+DELTA_PACE_SECONDS = 0.04
+# 批改评语切片推送节奏（秒）：mock 模拟逐字输出时用
+CHUNK_PACE_SECONDS = 0.03
 
 # ---- 服务 ----
 HOST = os.environ.get("APP_HOST", "127.0.0.1")

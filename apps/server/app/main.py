@@ -57,6 +57,13 @@ class GradeRequest(BaseModel):
     user_answer: str
 
 
+class ReviewRequest(BaseModel):
+    """AI 批改请求：题号 + 学生作答原文。"""
+
+    question_id: int
+    user_answer: str
+
+
 class AskRequest(BaseModel):
     query: str
 
@@ -195,6 +202,17 @@ async def grade(req: GradeRequest) -> dict:
     run_id = new_run_id()
     bus.create(run_id)
     spawn(orchestrator.grade(run_id, req.question_id, req.user_answer))
+    return {"run_id": run_id}
+
+
+@app.post("/api/review")
+async def review(req: ReviewRequest) -> dict:
+    """AI 批改：立刻返回 run_id，评分与流式评语走 /api/events/{run_id}。"""
+    if db.get_question(req.question_id) is None:
+        raise HTTPException(404, f"题目 {req.question_id} 不存在")
+    run_id = new_run_id()
+    bus.create(run_id)
+    spawn(orchestrator.review(run_id, req.question_id, req.user_answer))
     return {"run_id": run_id}
 
 

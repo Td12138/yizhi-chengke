@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 import uuid
 from pathlib import Path
@@ -15,88 +14,15 @@ from .agents.explain import ExplainAgent
 from .agents.extract import ExtractAgent
 from .agents.recognize import RecognizeAgent
 from .agents.retrieve import RetrieveAgent
+from .agents.review import ReviewAgent
 from .agents.verify import VerifyAgent
 from .events import Event, EventBus
+# 判分规则集中在 judge 模块（纯函数），此处 re-export 保持既有调用方不变
+from .judge import judge, normalize  # noqa: F401
 
 
 def new_run_id() -> str:
     return uuid.uuid4().hex[:12]
-
-
-# 中文输入法常见的全角标点/符号，判分前统一成半角（逗号要保留，不能直接删）
-FULLWIDTH_TABLE = str.maketrans(
-    {
-        "（": "(",
-        "）": ")",
-        "，": ",",
-        "：": ":",
-        "；": ";",
-        "。": ".",
-        "！": "!",
-        "？": "?",
-        "【": "[",
-        "】": "]",
-        "－": "-",
-        "＋": "+",
-        "＝": "=",
-        "．": ".",
-        "／": "/",
-        "＊": "*",
-        "＾": "^",
-        **{chr(0xFF10 + digit): str(digit) for digit in range(10)},
-    }
-)
-
-# 纯数值答案：判分时按数值比较，容忍 2 与 2.0、＋2 这类写法差异
-NUMBER_PATTERN = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)")
-# 数值比较容差（浮点写法差异，不是评分宽松度）
-NUMBER_TOLERANCE = 1e-9
-
-
-def normalize(text: str) -> str:
-    """判分归一化：全角转半角，去掉空白、$、括号、反斜杠并统一小写。"""
-    text = str(text).translate(FULLWIDTH_TABLE)
-    return re.sub(r"[\s$\\({})\\\\]", "", text).lower()
-
-
-def _answer_forms(normalized: str) -> set[str]:
-    """一个已归一化答案的等价写法集合。
-
-    有等号时把等号右侧也算一种写法：标准答案 `x = 2` 与用户只填 `2` 等价。
-    取最后一个等号，兼容 `a = b = 2` 这类连等式。
-    """
-    if not normalized:
-        return set()
-    forms = {normalized}
-    if "=" in normalized:
-        right = normalized.rsplit("=", 1)[1]
-        if right:
-            forms.add(right)
-    return forms
-
-
-def _same_value(left: str, right: str) -> bool:
-    """两种写法是否是同一个值：先比字符串，再按数值容差比。"""
-    if left == right:
-        return True
-    if NUMBER_PATTERN.fullmatch(left) and NUMBER_PATTERN.fullmatch(right):
-        return abs(float(left) - float(right)) <= NUMBER_TOLERANCE
-    return False
-
-
-def judge(question: dict, user_answer: str) -> bool:
-    """判分：fill 比较等价写法，choice 只比首字母。"""
-    expected = normalize(question.get("answer", ""))
-    given = normalize(user_answer)
-    if question.get("qtype") == "choice":
-        return bool(given) and bool(expected) and given[0] == expected[0]
-    if not expected or not given:
-        return False
-    return any(
-        _same_value(expect_form, given_form)
-        for expect_form in _answer_forms(expected)
-        for given_form in _answer_forms(given)
-    )
 
 
 class Orchestrator:
@@ -308,6 +234,40 @@ class Orchestrator:
                     "判分完成：错误，已生成讲解",
                     result={"correct": False, "explain": explain},
                 )
+        except Exception as exc:
+            await self._fail(run_id, exc)
+        finally:
+            self.bus.close(run_id)
+
+    async def review(self, run_id: str, question_id: int, user_answer: str) -> None:
+        """AI 批改：按得分点给分 + 流式评语，结构化结果随 done 事件交付。"""
+        ctx = RunContext(run_id, self.bus, {})
+        try:
+            question = db.get_question(question_id)
+            if question is None:
+                raise ValueError(f"题目 {question_id} 不存在")
+            ctx.state.update({"question": question, "user_answer": user_answer})
+
+            review = await self._step(ctx, ReviewAgent)
+
+            # 作答留痕：统计页与「错题回顾」都读 attempt 表
+            db.insert_attempt(
+                question_id,
+                user_answer,
+                review["verdict"] == "correct",
+                "；".join(review.get("issues") or []),
+            )
+
+            label = {"correct": "正确", "partial": "部分正确", "wrong": "错误"}[
+                review["verdict"]
+            ]
+            await self._emit(
+                run_id,
+                "orchestrator",
+                "done",
+                f"批改完成：{review['score']} 分（{label}）",
+                result=review,
+            )
         except Exception as exc:
             await self._fail(run_id, exc)
         finally:

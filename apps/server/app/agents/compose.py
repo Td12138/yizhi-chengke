@@ -1,10 +1,13 @@
-"""命题 Agent：知识点卡片 + 自然语言需求 → 变式题。"""
+"""命题 Agent：知识点卡片 + 自然语言需求 → 变式题（一题一条 delta）。"""
 
 from __future__ import annotations
+
+import asyncio
 
 from .. import config
 from ..providers import llm
 from .base import Agent
+from .verify import brief
 
 
 class ComposeAgent(Agent):
@@ -33,6 +36,18 @@ class ComposeAgent(Agent):
             question.setdefault("card_ids", card_ids)
 
         self.ctx.state["questions"] = questions
-        await self.emit("delta", f"生成 {len(questions)} 道题，待质检", questions=questions)
-        await self.emit("done", "命题完成，交给质检 Agent")
+
+        # 一道题一条 delta：前端可以逐题渲染，而不是等整批出完再一次性刷出来
+        for index, question in enumerate(questions, start=1):
+            await self.emit(
+                "delta",
+                f"第 {index}/{len(questions)} 题：{brief(question.get('stem_latex', ''))}",
+                question=question,
+                index=index,
+                total=len(questions),
+            )
+            if index < len(questions):
+                await asyncio.sleep(config.DELTA_PACE_SECONDS)
+
+        await self.emit("done", "命题完成，交给质检 Agent", questions=questions)
         return questions
