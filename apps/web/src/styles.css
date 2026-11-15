@@ -130,6 +130,13 @@ body {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+.pill-warn {
+  color: var(--warn);
+  border-color: #dcc38a;
+  background: #fdf6e7;
+  font-weight: 600;
+}
+
 @keyframes pulse {
   50% {
     opacity: 0.45;

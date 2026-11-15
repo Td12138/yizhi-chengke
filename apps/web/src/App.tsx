@@ -14,6 +14,16 @@ import SourceStrip from "./components/SourceStrip";
 import TourGuide, { shouldAutoStartTour } from "./components/TourGuide";
 import type { Board, RunInfo, Stage } from "./components/RunProgress";
 import {
+  clampCount,
+  describeError,
+  MAX_QUESTIONS,
+  MIN_QUESTIONS,
+  normalizeStreamedCard,
+  normalizeStreamedQuestion,
+  readReviewResult,
+} from "./lib/normalize";
+import { checkUpload, fileBadge } from "./lib/upload";
+import {
   fetchGraph,
   fetchSources,
   fetchStats,
@@ -30,12 +40,7 @@ import type {
   Explain,
   GraphData,
   Question,
-  ReviewBetterMethod,
   ReviewFeed,
-  ReviewFirstError,
-  ReviewResult,
-  ReviewStep,
-  ReviewVerdict,
   SourceItem,
   StatsData,
   Status,
@@ -48,9 +53,6 @@ const AGENT_LABEL: Record<string, string> = {
 const LETTERS = "ABCDEFGH";
 const MAX_LOGS = 200;
 const NOTICE_MS = 4_000;
-/** 生成题数范围：与后端 /api/generate 的约束一致，输入框与提交都夹在这个区间 */
-const MIN_QUESTIONS = 1;
-const MAX_QUESTIONS = 12;
 /** 「最常被问」列表条数，与后端 /api/stats 的默认返回量对齐 */
 const TOP_ASKED = 10;
 /** 卡片区最多显示几张来源原图缩略（面板窄，多了要横向滚动） */
@@ -119,33 +121,15 @@ const STAGES: Record<string, Stage[]> = {
 const FIRST_TEMP_ID = 0;
 
 /**
- * 上传约束：与后端 config.ALLOWED_SUFFIXES / DOC_SUFFIXES / MAX_*_BYTES 对齐。
- * 后端改后缀或上限时，这里要同步，否则会在前端误拦或漏拦。
+ * 上传控件的 accept：只决定文件选择框的默认过滤，真正校验在 lib/upload.ts。
  */
 const UPLOAD_ACCEPT = "image/*,.pdf,.docx,.txt,.md";
-const IMAGE_SUFFIXES = [".png", ".jpg", ".jpeg", ".webp", ".bmp"];
-const DOC_SUFFIXES = [".pdf", ".docx", ".txt", ".md"];
-const MB = 1024 * 1024;
-/** 图片上限 12MB（后端 MAX_UPLOAD_BYTES） */
-const MAX_IMAGE_BYTES = 12 * MB;
-/** 文档上限 20MB（后端 MAX_DOC_BYTES） */
-const MAX_DOC_BYTES = 20 * MB;
-const MAX_IMAGE_MB = MAX_IMAGE_BYTES / MB;
-const MAX_DOC_MB = MAX_DOC_BYTES / MB;
-const UPLOAD_FORMATS_HINT = "图片或 PDF/DOCX/TXT/MD";
 
 type LogItem = { seq: number; agent: string; phase: Status; message: string };
 type RunError = { step: string; message: string; retry: boolean };
 
 /** 上传预览：图片走缩略图，文档只显示文件名 + 类型徽标 */
 type FilePreview = { url: string; name: string; kind: "image" | "document" };
-type UploadCheck =
-  | { ok: true; kind: "image" | "document" }
-  | { ok: false; message: string };
-
-function describeError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 /** 等待上限（秒）：与 api.ts 的按动作超时表同源，只用于文案展示 */
 function timeoutSecOf(kind: string): number {
@@ -158,158 +142,6 @@ function timeoutHintFor(kind: string): string {
     return "后端可能仍在处理，稍后刷新可见；也可重试，反复超时请查看后端日志。";
   }
   return "后端可能仍在处理，可直接重试；本次结果不会自动保存，反复超时请查看后端日志。";
-}
-
-/** 题数夹到 1–12：输入框清空（NaN）、手打 99 都不越界 */
-function clampCount(value: number): number {
-  if (!Number.isFinite(value)) return MIN_QUESTIONS;
-  return Math.min(MAX_QUESTIONS, Math.max(MIN_QUESTIONS, Math.round(value)));
-}
-
-/** 小写后缀（含点）；没有扩展名返回空串 */
-function suffixOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return dot >= 0 ? name.slice(dot).toLowerCase() : "";
-}
-
-/** 文档预览的徽标文字：PDF / DOCX / TXT / MD */
-function fileBadge(name: string): string {
-  return suffixOf(name).replace(".", "").toUpperCase() || "DOC";
-}
-
-/** 提交前校验：格式与大小都在前端拦下，给出明确原因，不等后端 400/413 */
-function checkUpload(file: File): UploadCheck {
-  const suffix = suffixOf(file.name);
-  const isImage = IMAGE_SUFFIXES.includes(suffix);
-  const isDoc = DOC_SUFFIXES.includes(suffix);
-  if (!isImage && !isDoc) {
-    return {
-      ok: false,
-      message: suffix
-        ? `不支持 ${suffix}，请上传${UPLOAD_FORMATS_HINT}`
-        : `文件「${file.name}」没有扩展名，请上传${UPLOAD_FORMATS_HINT}`,
-    };
-  }
-  if (isDoc && file.size > MAX_DOC_BYTES) {
-    return {
-      ok: false,
-      message: `文件过大（${(file.size / MB).toFixed(1)}MB）：文档上限 ${MAX_DOC_MB}MB，请压缩后再试`,
-    };
-  }
-  if (isImage && file.size > MAX_IMAGE_BYTES) {
-    return {
-      ok: false,
-      message: `图片过大（${(file.size / MB).toFixed(1)}MB）：图片上限 ${MAX_IMAGE_MB}MB，请压缩后再试`,
-    };
-  }
-  return { ok: true, kind: isDoc ? "document" : "image" };
-}
-
-/**
- * 出题流里的单题：delta 的 payload.question 可能只有部分字段，
- * 缺什么补什么，避免渲染阶段因空值崩掉。
- */
-function normalizeStreamedQuestion(raw: any, tempId: number): Question {
-  const options = Array.isArray(raw?.options)
-    ? raw.options.map((item: unknown) => String(item))
-    : [];
-  return {
-    id: typeof raw?.id === "number" && raw.id > 0 ? raw.id : tempId,
-    stem_latex: String(raw?.stem_latex ?? ""),
-    qtype: raw?.qtype === "choice" ? "choice" : "fill",
-    options,
-    answer: String(raw?.answer ?? ""),
-    solution: String(raw?.solution ?? ""),
-    difficulty: String(raw?.difficulty ?? ""),
-    verified: Number(raw?.verified ?? 0) || 0,
-    verify_log: String(raw?.verify_log ?? ""),
-  };
-}
-
-/** 卡片流里的单卡：标签后端可能给数组，统一成逗号串（与 /api/cards 一致） */
-function normalizeStreamedCard(raw: any, tempId: number): Card {
-  const tags = Array.isArray(raw?.tags)
-    ? raw.tags.map((item: unknown) => String(item)).join(",")
-    : String(raw?.tags ?? "");
-  return {
-    id: typeof raw?.id === "number" && raw.id > 0 ? raw.id : tempId,
-    title: String(raw?.title ?? "（识别中）"),
-    summary: String(raw?.summary ?? ""),
-    subject: String(raw?.subject ?? ""),
-    tags,
-    formula: String(raw?.formula ?? ""),
-    body: String(raw?.body ?? ""),
-  };
-}
-
-/** 分步清单：字段缺 / 形状不对就丢掉那一条，index 缺失时按顺序补 */
-function readReviewSteps(raw: any): ReviewStep[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((step: any) => step && typeof step.expect === "string" && step.expect)
-    .map((step: any, position: number) => {
-      const index = Number(step.index);
-      return {
-        index: Number.isFinite(index) && index > 0 ? Math.trunc(index) : position + 1,
-        expect: step.expect,
-        found: Boolean(step.found),
-        note: typeof step.note === "string" ? step.note : "",
-      };
-    });
-}
-
-function readFirstError(raw: any): ReviewFirstError | null {
-  if (!raw || typeof raw !== "object") return null;
-  const step = Number(raw.step);
-  if (!Number.isFinite(step) || step <= 0) return null;
-  return {
-    step: Math.trunc(step),
-    reason: typeof raw.reason === "string" ? raw.reason : "",
-  };
-}
-
-function readBetterMethod(raw: any): ReviewBetterMethod | null {
-  if (!raw || typeof raw !== "object") return null;
-  const name = typeof raw.name === "string" ? raw.name.trim() : "";
-  const why = typeof raw.why === "string" ? raw.why : "";
-  const steps = Array.isArray(raw.steps)
-    ? raw.steps.map((item: unknown) => String(item)).filter((item) => item.trim() !== "")
-    : [];
-  // 名称与步骤都空时视为没有更优解法，避免出现空卡片
-  if (!name && steps.length === 0) return null;
-  return { name: name || "推荐解法", why, steps };
-}
-
-/** 批改结论：缺字段补空；score 不是数字视为没拿到结论（调用方据此报错重试） */
-function readReviewResult(raw: any): ReviewResult | null {
-  if (!raw || typeof raw !== "object") return null;
-  const score = Number(raw.score);
-  if (!Number.isFinite(score)) return null;
-  const verdict: ReviewVerdict | undefined =
-    raw.verdict === "correct" || raw.verdict === "partial" || raw.verdict === "wrong"
-      ? raw.verdict
-      : undefined;
-  const points = Array.isArray(raw.points)
-    ? raw.points
-        .filter((point: any) => point && typeof point.text === "string")
-        .map((point: any) => ({ hit: Boolean(point.hit), text: point.text }))
-    : [];
-  const issues = Array.isArray(raw.issues)
-    ? raw.issues.map((issue: unknown) => String(issue))
-    : [];
-  return {
-    score,
-    verdict,
-    points,
-    issues,
-    suggestion: typeof raw.suggestion === "string" ? raw.suggestion : "",
-    reference: typeof raw.reference === "string" ? raw.reference : "",
-    steps: readReviewSteps(raw.steps),
-    first_error: readFirstError(raw.first_error),
-    better_method: readBetterMethod(raw.better_method),
-    method_comparison:
-      typeof raw.method_comparison === "string" ? raw.method_comparison : "",
-  };
 }
 
 export default function App() {
@@ -339,6 +171,7 @@ export default function App() {
   const [health, setHealth] = useState<{
     vlm_provider: string;
     llm_provider: string;
+    ready?: boolean;
   } | null>(null);
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [stats, setStats] = useState<StatsData | null>(null);
@@ -366,6 +199,10 @@ export default function App() {
   const activeRun = useRef("");
   /** 进度条归属令牌：只让最后发起的那次运行改写进度条状态 */
   const runToken = useRef(0);
+  /** 最近一次可重放的 run：断流 / 超时后优先重订 SSE，避免重复 POST 造成重复入库 */
+  const resumableRun = useRef<{ kind: string; runId: string } | null>(null);
+  /** 每道题最近一次批改的 run：面板里的「重试」同样走重放 */
+  const reviewRuns = useRef<Record<number, string>>({});
 
   /**
    * 拉取知识谱系、统计与归档原图。
@@ -404,23 +241,40 @@ export default function App() {
   }, [loadKnowledge]);
 
   useEffect(() => {
-    getJSON<{ cards: Card[] }>("/api/cards")
+    let cancelled = false;
+    // allSettled：一个接口失败不拖累其余数据；失败要显式提示，不能静默空白
+    Promise.allSettled([
+      getJSON<{ cards: Card[] }>("/api/cards"),
+      getJSON<{ questions: Question[] }>("/api/questions"),
+      getJSON<{
+        vlm_provider: string;
+        llm_provider: string;
+        ready?: boolean;
+      }>("/api/health"),
+    ]).then(([cardsResult, questionsResult, healthResult]) => {
+      if (cancelled) return;
       // 首屏数据晚到：已有运行在跑时不要用旧库数据覆盖流式追加的卡片
-      .then((data) => {
-        if (runToken.current !== 0) return;
-        setCards(data.cards);
-      })
-      .catch(() => undefined);
-    getJSON<{ questions: Question[] }>("/api/questions")
-      .then((data) => {
-        if (runToken.current !== 0) return;
-        setQuestions(data.questions);
-      })
-      .catch(() => undefined);
-    getJSON<{ vlm_provider: string; llm_provider: string }>("/api/health")
-      .then(setHealth)
-      .catch(() => undefined);
+      if (runToken.current === 0) {
+        if (cardsResult.status === "fulfilled") setCards(cardsResult.value.cards);
+        if (questionsResult.status === "fulfilled") {
+          setQuestions(questionsResult.value.questions);
+        }
+      }
+      if (healthResult.status === "fulfilled") setHealth(healthResult.value);
+
+      const failed = [cardsResult, questionsResult, healthResult].find(
+        (result) => result.status === "rejected"
+      );
+      if (failed && failed.status === "rejected") {
+        setError({
+          step: "加载初始数据",
+          message: `${describeError(failed.reason)}。请确认后端已启动，或刷新页面重试。`,
+          retry: false,
+        });
+      }
+    });
     return () => {
+      cancelled = true;
       if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
       window.clearTimeout(noticeTimer.current);
     };
@@ -472,12 +326,24 @@ export default function App() {
     });
   }
 
-  /** 流式追加一张卡片：真 id 重复则跳过 */
+  /** 流式追加一张卡片：真 id 重复则跳过；重放时占位卡按内容去重 */
   function appendCard(raw: any) {
     tempSeq.current -= 1;
     const incoming = normalizeStreamedCard(raw, tempSeq.current);
     setCards((prev) => {
       if (incoming.id > 0 && prev.some((card) => card.id === incoming.id)) {
+        return prev;
+      }
+      // 断流后重放同一 run：占位卡（负数 id）会再收到一遍，内容相同就不再追加
+      if (
+        incoming.id <= 0 &&
+        prev.some(
+          (card) =>
+            card.id <= 0 &&
+            card.title === incoming.title &&
+            card.summary === incoming.summary
+        )
+      ) {
         return prev;
       }
       return [...prev, incoming];
@@ -537,12 +403,14 @@ export default function App() {
    * 一次运行：发起任务 → 订阅事件流 → 处理结果。
    * 出错时写明是哪一步，并保留重试入口（不静默失败）。
    * `before` 在拿到 run_id 之后、事件流开始之前执行（如清空上一轮流式结果）。
+   * `resumeRunId` 非空表示重放已有 run（服务端保留事件历史），不再重复 POST。
    */
   async function execute(
     kind: string,
     start: () => Promise<{ run_id: string }>,
     after?: (last: AgentEvent | null) => void | Promise<void>,
-    before?: () => void
+    before?: () => void,
+    resumeRunId?: string
   ) {
     if (busy) return;
     const label = ACTION_LABEL[kind] ?? kind;
@@ -554,6 +422,8 @@ export default function App() {
     setError(null);
     setNotice("");
     setBoard({});
+    // 重放会再走一遍历史事件：先清日志，避免同一批事件出现两份
+    if (resumeRunId) setLogs([]);
     setRun({
       kind,
       label,
@@ -562,17 +432,29 @@ export default function App() {
       elapsedMs: 0,
     });
     retryRef.current = () => {
+      const last = resumableRun.current;
+      if (last && last.kind === kind) {
+        void execute(kind, start, after, before, last.runId);
+        return;
+      }
       void execute(kind, start, after, before);
     };
 
     try {
       let runId: string;
-      try {
-        const started = await start();
-        runId = started.run_id;
-      } catch (err) {
-        failRun(`${label} · 发起任务`, describeError(err), token);
-        return;
+      if (resumeRunId) {
+        runId = resumeRunId;
+      } else {
+        // 新任务先清掉旧 run：发起失败时不能让「重试」重放上一次的流
+        resumableRun.current = null;
+        try {
+          const started = await start();
+          runId = started.run_id;
+        } catch (err) {
+          failRun(`${label} · 发起任务`, describeError(err), token);
+          return;
+        }
+        resumableRun.current = { kind, runId };
       }
 
       activeRun.current = runId;
@@ -584,6 +466,15 @@ export default function App() {
           setRun((prev) => (prev && prev.active ? { ...prev, elapsedMs } : prev));
         },
       });
+
+      if (
+        resumeRunId &&
+        outcome.reason === "broken" &&
+        outcome.eventCount === 0
+      ) {
+        // 服务端已回收这次 run：下次重试回到「重新发起」
+        resumableRun.current = null;
+      }
 
       if (outcome.reason === "timeout") {
         failRun(
@@ -783,7 +674,7 @@ export default function App() {
    * review 的 delta.chunk 逐条追加成流式文本，结论取 orchestrator/done 的 result。
    * 与判分互不阻塞：只禁用该题的两个按钮，可同时批改不同题目。
    */
-  async function reviewQuestion(questionId: number) {
+  async function reviewQuestion(questionId: number, resumeRunId?: string) {
     if (questionId <= 0) return;
     if (busy) return;
     if (reviews[questionId]?.status === "running") return;
@@ -803,19 +694,27 @@ export default function App() {
 
     try {
       let runId: string;
-      try {
-        const started = await postJSON<{ run_id: string }>("/api/review", {
-          question_id: questionId,
-          user_answer: answers[questionId] ?? "",
-        });
-        runId = started.run_id;
-      } catch (err) {
-        failReview(questionId, `发起批改失败：${describeError(err)}`, token);
-        return;
+      if (resumeRunId) {
+        runId = resumeRunId;
+      } else {
+        // 新一轮批改先清掉旧 run：POST 失败时不能误重放上一次
+        delete reviewRuns.current[questionId];
+        try {
+          const started = await postJSON<{ run_id: string }>("/api/review", {
+            question_id: questionId,
+            user_answer: answers[questionId] ?? "",
+          });
+          runId = started.run_id;
+        } catch (err) {
+          failReview(questionId, `发起批改失败：${describeError(err)}`, token);
+          return;
+        }
+        reviewRuns.current[questionId] = runId;
       }
 
       activeRun.current = runId;
       setBoard({});
+      if (resumeRunId) setLogs([]);
       const outcome = await streamRun(
         runId,
         (event) => {
@@ -858,6 +757,15 @@ export default function App() {
           },
         }
       );
+
+      if (
+        resumeRunId &&
+        outcome.reason === "broken" &&
+        outcome.eventCount === 0
+      ) {
+        // 服务端已回收这次 run：下次「重试」回到重新发起
+        delete reviewRuns.current[questionId];
+      }
 
       if (outcome.reason === "timeout") {
         failReview(
@@ -956,6 +864,14 @@ export default function App() {
           <span className={`pill ${health?.llm_provider === "mock" ? "pill-mock" : "pill-live"}`}>
             LLM {health?.llm_provider ?? "…"}
           </span>
+          {health && health.ready === false && (
+            <span
+              className="pill pill-warn"
+              title="所选真实模型缺 Key / Base URL / 模型名，接口会明确报错"
+            >
+              模型未就绪
+            </span>
+          )}
           {busy && <span className="pill pill-busy">运行中 · {busyLabel}</span>}
         </div>
       </header>
@@ -1326,7 +1242,12 @@ export default function App() {
                   {ready && review && (
                     <ReviewPanel
                       state={review}
-                      onRetry={() => void reviewQuestion(question.id)}
+                      onRetry={() =>
+                        void reviewQuestion(
+                          question.id,
+                          reviewRuns.current[question.id]
+                        )
+                      }
                     />
                   )}
 

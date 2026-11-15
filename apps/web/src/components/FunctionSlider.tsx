@@ -74,8 +74,8 @@ function readParams(raw: unknown): SliderParams | null {
     values.push(value);
   }
   const [a, b, c, xMin, xMax] = values;
-  // 区间长度为 0 / 反向时无法画图（会除零）
-  if (xMax === xMin) return null;
+  // 区间长度为 0 / 反向时无法画图（会除零或反转坐标轴）
+  if (xMax <= xMin) return null;
   return { a, b, c, xMin, xMax };
 }
 

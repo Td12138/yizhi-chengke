@@ -103,7 +103,8 @@ export interface ReviewFeed {
 export interface Explain {
   template: string;
   title: string;
-  params: { a: number; b: number; c: number; x_min: number; x_max: number };
+  /** 后端归一后可能不带 params（结构不合法），此时只显示文字讲解 */
+  params?: { a: number; b: number; c: number; x_min: number; x_max: number } | null;
   script: string;
 }
 
