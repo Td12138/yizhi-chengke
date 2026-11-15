@@ -1103,7 +1103,7 @@ export default function App() {
             ))}
             {logs.length === 0 && (
               <div className="log-empty">
-                <p>上传一页纸后，这里会依次记录六个 Agent 的处理过程。</p>
+                <p>上传一页纸后，这里会依次记录七个 Agent 的处理过程。</p>
                 <p className="log-empty-sub">
                   命题与质检会来回两轮，直到题目答案能被验算通过。
                 </p>

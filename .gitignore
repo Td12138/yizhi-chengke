@@ -28,3 +28,7 @@ Desktop.ini
 apps/desktop/runtime/
 apps/desktop/release/
 apps/desktop/build/.cache/
+
+# ===== LaTeX 构建残留（可重建，不入库）=====
+*.aux
+*.log

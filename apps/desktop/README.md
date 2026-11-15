@@ -45,7 +45,7 @@ npm run package:dir               # 只出 win-unpacked（最快，验证用）
 npm run package:nsis              # 只出 NSIS 安装包（可选）
 ```
 
-产物文件名用英文（`YizhiChengke-0.1.0-portable.exe`），避免中文路径在部分解压工具/CI 中出问题；`package:zip` 会额外复制一份中文名 `一纸成课-portable.exe` 方便直接发人。窗口与安装后的显示名仍是「一纸成课」。
+产物文件名用英文（`YizhiChengke-0.1.1-portable.exe`），避免中文路径在部分解压工具/CI 中出问题；`package:zip` 会额外复制一份中文名 `一纸成课-portable.exe` 方便直接发人。窗口与安装后的显示名仍是「一纸成课」。
 
 构建直接用 `node_modules/electron/dist`（`build.electronDist`），不再联网下载 Electron；若本机杀软/网盘同步盘干扰打包，可用
 `npx electron-builder --win --x64 --config.directories.output=<另一块盘的空目录>` 换输出盘，再把产物拷回 `release/`。
@@ -119,7 +119,7 @@ pwsh -File build/prepare_runtime.ps1 -Python "<宿主 python 路径>"
 
 | 产物 | 体积 | 说明 |
 |---|---|---|
-| `release/YizhiChengke-0.1.0-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **144.8 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
+| `release/YizhiChengke-0.1.1-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **144.8 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
 | `release/一纸成课-win64.zip` | **215.7 MB** | `win-unpacked/` 整目录压缩，答辩现场推荐 |
 | `release/win-unpacked/一纸成课.exe` | 解压后 512.5 MB | 免安装目录版（Electron 357.2 MB + 内置 Python 152.7 MB） |
 
@@ -163,18 +163,18 @@ portable 是 NSIS 自解压：**每次双击都要把 512.5 MB 解到 `%TEMP%\<�
 | Electron dev 开窗 | 日志 `界面自检：title=一纸成课`，DOM 非空 |
 | portable 双击 → 界面 | `界面自检` 通过，`/api/health` ok |
 | 打包版 PDF/DOCX 上传 | 内置运行时直接跑后端：`POST /api/ingest` 分别返回 `{"kind":"document"}`；DOCX 事件 `docx 直接解析：2 个段落/表格块`，PDF 事件 `文档共 1 页`（pymupdf 解析），无 ImportError |
-| 打包版端到端「上传 → 出题 → 判分 → 追问」 | 6 个 Agent 全部有名：recognize / extract / compose / verify / explain / retrieve，3 张卡片、3 道题 |
+| 打包版端到端「上传 → 出题 → 判分 → 批改 → 追问」 | 7 个 Agent 全部有名：recognize / extract / compose / verify / explain / retrieve / review，3 张卡片、5 道题 |
 | 端口占用顺延 | 8710 被占 → 自动用 8711，界面 1.68 s 就绪 |
 | 单实例锁 | 第二个进程立即退出（`second_exited=True`），不会抢端口 |
 | 后端起不来 | 显示 `error.html`（含原因 + 「查看日志」按钮），不白屏 |
 | 摄像头（假设备，打包版） | `getUserMedia` 返回 `fake_device_0`；点「打开摄像头」后 `video.readyState=4`、`paused=false`、无错误提示；日志「放行媒体权限：video」 |
 | 启动页 / 错误页配色 | 与主界面同一套浅色 token（`#f7f9fc` / `#ffffff` / `#0f766e`），无深色闪屏 |
 | 关闭窗口 | `taskkill /T /F` 后端，残留 `一纸成课*` / `python*` 进程 0 个，监听端口 0 个 |
-| `pytest apps/server/tests -q` | **136 passed**（并行开发新增用例；原 42 项全绿） |
+| `pytest apps/server/tests -q` | **192 passed**（含并行开发新增用例） |
 
 ## 已知限制
 
-- **首次启动慢**：portable 要先自解压 474 MB 到临时目录，本机约 31 s（Defender 实时扫描），之后 Electron 骨架立即出现，后端约 6 s 就绪。追求「秒开」请用 zip 目录版。
+- **首次启动慢**：portable 要先自解压 512.5 MB 到临时目录，本机实测 36–48 s（Defender 实时扫描），之后 Electron 骨架立即出现，后端约 6 s 就绪。追求「秒开」请用 zip 目录版。
 - **杀软误报**：单文件自解压 + 未签名 exe 容易被 360/火绒/Defender 拦。兜底方案是解压 `一纸成课-win64.zip` 直接运行目录版；不要为此关杀软。未做代码签名（时间与证书限制）。
 - **端口占用**：8710/8711/8712 全被占时启动失败并提示端口；需要先关掉占用程序。
 - **不做自动更新、不做签名**。

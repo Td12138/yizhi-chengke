@@ -1,6 +1,6 @@
 {
   "name": "yizhi-chengke-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "一纸成课桌面版：Electron 外壳 + FastAPI 后端（Web 模式仍是主路径）",
   "main": "main.js",
