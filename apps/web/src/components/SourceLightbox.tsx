@@ -52,7 +52,7 @@ export default function SourceLightbox({ source, onClose }: Props) {
         <div className="source-meta">
           <span className="tag">{formatDate(source.created_at)}</span>
           <span className="tag">{source.card_count} 个知识点</span>
-          <span className="hint">原图按识别结果重命名归档</span>
+          <span className="hint">来源文件按识别结果重命名归档</span>
         </div>
       </div>
     </div>

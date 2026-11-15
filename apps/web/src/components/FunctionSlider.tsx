@@ -38,7 +38,7 @@ function buildPath(
   for (let i = 0; i <= STEPS; i++) {
     const x = xMin + ((xMax - xMin) * i) / STEPS;
     const y = a * x * x + b * x + c;
-    if (y < -Y_LIMIT || y > Y_LIMIT) {
+    if (!Number.isFinite(y) || y < -Y_LIMIT || y > Y_LIMIT) {
       drawing = false;
       continue;
     }

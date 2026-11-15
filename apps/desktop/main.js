@@ -18,6 +18,7 @@
 
 const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const { spawn, spawnSync } = require('node:child_process');
+const { pathToFileURL } = require('node:url');
 const fs = require('node:fs');
 const http = require('node:http');
 const net = require('node:net');
@@ -513,9 +514,14 @@ function showErrorPage(title, detail, logText, options) {
   target.loadFile(path.join(__dirname, 'error.html'), { query });
 }
 
-/** 只认本机后端 origin（127.0.0.1）；绝不给 file:// 或外部站点放权。 */
+/** 只认本机后端 origin（精确端口）；绝不给 file:// 或外部站点放权。 */
 function isLocalOrigin(url) {
-  return typeof url === 'string' && url.startsWith(LOCAL_ORIGIN_PREFIX);
+  if (typeof url !== 'string') return false;
+  try {
+    return new URL(url).origin === backendUrl;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -578,6 +584,7 @@ const APP_CSP = [
   "default-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
+  "font-src 'self' data:",
   "media-src 'self' blob:",
   "connect-src 'self'",
   "frame-src 'self'",
@@ -615,8 +622,9 @@ function attachNavigationHandlers(win) {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
-    // 应用自身的同源页面放行；file:// 留给本机错误页 / 加载页
-    if (isBackendOrigin(url) || url.startsWith('file://')) return;
+    // 应用自身的同源页面放行；file:// 只放行本目录下的错误页 / 加载页
+    const appFileOrigin = pathToFileURL(__dirname).href;
+    if (isBackendOrigin(url) || url.startsWith(appFileOrigin)) return;
     event.preventDefault();
     log(`拦截导航：${url}`);
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);

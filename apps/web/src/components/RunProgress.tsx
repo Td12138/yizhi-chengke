@@ -67,11 +67,14 @@ export default function RunProgress({
   timeoutSec: number;
 }) {
   const states = stages.map((stage) => stageState(stage, board));
-  const doneCount = states.filter((state) => state === "done").length;
+  // 驳回（warn）也是已结束的状态，不能只数 done，否则会出现「完成 + 67%」
+  const settledCount = states.filter(
+    (state) => state === "done" || state === "warn"
+  ).length;
   const failed = run.failed || states.includes("failed");
   // 只有「被驳回」没有「真失败」时走黄灯：整条进度不标红
   const warned = !failed && states.includes("warn");
-  const percent = Math.round((doneCount / Math.max(1, states.length)) * 100);
+  const percent = Math.round((settledCount / Math.max(1, states.length)) * 100);
   const current =
     stages[states.findIndex((state) => state === "active")]?.label ?? "";
 

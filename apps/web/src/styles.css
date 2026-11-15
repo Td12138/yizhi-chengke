@@ -646,7 +646,7 @@ body {
 /* ---------- 看板 ---------- */
 .board {
   display: grid;
-  /* 固定 3 列：6 个 Agent 正好两行，投影时卡片够宽、字够大 */
+  /* 固定 3 列：7 个 Agent 排成两行 + 1 个，投影时卡片够宽、字够大 */
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }

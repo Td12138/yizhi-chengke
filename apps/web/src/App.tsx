@@ -152,6 +152,14 @@ function timeoutSecOf(kind: string): number {
   return Math.round(timeoutMsFor(kind) / 1000);
 }
 
+/** 超时兜底文案：只有入库类动作刷新后能回来，判分/批改/追问不会自动保存 */
+function timeoutHintFor(kind: string): string {
+  if (kind === "ingest" || kind === "generate") {
+    return "后端可能仍在处理，稍后刷新可见；也可重试，反复超时请查看后端日志。";
+  }
+  return "后端可能仍在处理，可直接重试；本次结果不会自动保存，反复超时请查看后端日志。";
+}
+
 /** 题数夹到 1–12：输入框清空（NaN）、手打 99 都不越界 */
 function clampCount(value: number): number {
   if (!Number.isFinite(value)) return MIN_QUESTIONS;
@@ -580,7 +588,7 @@ export default function App() {
       if (outcome.reason === "timeout") {
         failRun(
           `${label} · 等待结果`,
-          `超过 ${timeoutSecOf(kind)} 秒仍未收到结束事件，已停止等待。后端可能仍在处理，稍后刷新可见；也可重试，反复超时请查看后端日志。`,
+          `超过 ${timeoutSecOf(kind)} 秒仍未收到结束事件，已停止等待。${timeoutHintFor(kind)}`,
           token
         );
         return;
@@ -814,6 +822,17 @@ export default function App() {
           handleEvent(event);
           if (event.agent !== "review") return;
           if (event.phase === "delta") {
+            // 流式中断后服务端会回退成完整评语；先把已显示的半句清掉，
+            // 否则 UI 会看到「中断前半句 + 完整评语」粘在一起。
+            if (event.payload?.notice === "stream-fallback") {
+              setReviews((prev) => {
+                const current = prev[questionId];
+                if (!current || current.status !== "running") return prev;
+                return { ...prev, [questionId]: { ...current, text: "" } };
+              });
+              setNotice(event.message || "流式批改中断，已回退为一次性批改");
+              return;
+            }
             const chunk =
               typeof event.payload?.chunk === "string" ? event.payload.chunk : "";
             if (!chunk) return;
@@ -843,7 +862,7 @@ export default function App() {
       if (outcome.reason === "timeout") {
         failReview(
           questionId,
-          `超过 ${timeoutSecOf("review")} 秒仍未返回批改结果，已停止等待。后端可能仍在处理，稍后刷新可见；也可重试。`,
+          `超过 ${timeoutSecOf("review")} 秒仍未返回批改结果，已停止等待。${timeoutHintFor("review")}`,
           token
         );
         return;
@@ -1045,8 +1064,8 @@ export default function App() {
           {sources.length > 0 && (
             <SourceStrip
               className="source-strip-cards"
-              title="来源原图"
-              hint="点击看大图"
+              title="来源文件"
+              hint="点击查看"
               sources={sources}
               limit={CARD_SOURCE_LIMIT}
               showCaption={false}
@@ -1127,7 +1146,7 @@ export default function App() {
               <div className="log-empty">
                 <p>上传一页纸后，这里会依次记录七个 Agent 的处理过程。</p>
                 <p className="log-empty-sub">
-                  命题与质检会来回两轮，直到题目答案能被验算通过。
+                  命题与质检最多来回 3 轮（首轮 + 2 次重试），直到题目答案能被验算通过。
                 </p>
               </div>
             )}
@@ -1439,10 +1458,10 @@ export default function App() {
           <div className="source-gallery">
             <SourceStrip
               title="知识库图册"
-              hint={`最近 ${GALLERY_SOURCE_LIMIT} 张 · 左右滚动 · 点击看大图`}
+              hint={`最近 ${GALLERY_SOURCE_LIMIT} 个来源文件 · 左右滚动 · 点击查看`}
               sources={sources}
               limit={GALLERY_SOURCE_LIMIT}
-              emptyText="还没有归档的图片"
+              emptyText="还没有归档的来源文件"
               error={sourcesError}
               onOpen={setLightbox}
             />
