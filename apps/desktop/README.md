@@ -171,7 +171,7 @@ portable 是 NSIS 自解压：**每次双击都要把 471.3 MB 解到 `%TEMP%\<�
 | 启动页 / 错误页配色 | 与主界面同一套浅色 token（`#f7f9fc` / `#ffffff` / `#0f766e`），无深色闪屏 |
 | 关闭窗口 | `taskkill /T /F` 后端，残留 `一纸成课*` / `python*` 进程 0 个，监听端口 0 个 |
 | `pytest apps/server/tests -q` | **292 passed**（22 个测试文件，约 45 s） |
-| `npm --prefix apps/web test` | **11 passed**（前端纯函数单测，Node 自带测试器） |
+| `npm --prefix apps/web test` | **11 passed**（前端纯函数单测，Node ≥ 22.6 自带测试器） |
 
 ## 已知限制
 
