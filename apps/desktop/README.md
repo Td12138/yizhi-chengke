@@ -121,9 +121,9 @@ pwsh -File build/prepare_runtime.ps1 -Python "<宿主 python 路径>"
 |---|---|---|
 | `release/YizhiChengke-0.1.2-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **136.9 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
 | `release/yizhi-chengke-0.1.2-win64.zip` | **200.5 MB** | `win-unpacked/` 整目录压缩，答辩现场推荐 |
-| `release/win-unpacked/一纸成课.exe` | 解压后 471.8 MB | 免安装目录版（Electron 357.2 MB + 内置 Python 112.1 MB） |
+| `release/win-unpacked/一纸成课.exe` | 解压后 471.3 MB | 免安装目录版（Electron 357.2 MB + 内置 Python 111.6 MB） |
 
-内置 Python 运行时单独 112.1 MB（sympy 约 69 MB；已剔除全部 `tests/` 目录，省 31 MB）。
+内置 Python 运行时单独 111.6 MB（sympy 约 69 MB；已剔除全部 `tests/` 目录，省 31 MB）。
 2026-11-15 的运行时重建补装了此前漏装的 `pymupdf / pypdf / python-docx`（`requirements.txt` 有、runtime 里没有，
 文档上传会 ImportError），因此体积比旧版大，属修复而非膨胀。
 
@@ -137,12 +137,12 @@ pwsh -File build/prepare_runtime.ps1 -Python "<宿主 python 路径>"
 | `一纸成课-portable.exe`（含解压，实测） | **36 ~ 48 s** | — | 48.1 s |
 
 窗口出现与后端无关：`app.whenReady()` 第一件事就开窗，实测 0.18~0.21 s 可见（目标 < 1.5 s）。
-后端就绪时间波动大（同一台机器 2.5~5.1 s），主要花在 Defender 首次扫描新解压的 112.1 MB 运行时与
+后端就绪时间波动大（同一台机器 2.5~5.1 s），主要花在 Defender 首次扫描新解压的 111.6 MB 运行时与
 sympy/pymupdf 导入；第二次启动通常更快。
 
 ### portable 的解压成本（已知限制）
 
-portable 是 NSIS 自解压：**每次双击都要把 471.8 MB 解到 `%TEMP%\<随机目录>`，退出时删除**。
+portable 是 NSIS 自解压：**每次双击都要把 471.3 MB 解到 `%TEMP%\<随机目录>`，退出时删除**。
 本机实测解压阶段 36~48 s，期间没有任何窗口，用户容易以为没反应——这是 NSIS 包装器的固有限制，
 主进程无法提前出窗。
 
@@ -174,7 +174,7 @@ portable 是 NSIS 自解压：**每次双击都要把 471.8 MB 解到 `%TEMP%\<�
 
 ## 已知限制
 
-- **首次启动慢**：portable 要先自解压 471.8 MB 到临时目录，本机实测 36–48 s（Defender 实时扫描），之后 Electron 骨架立即出现，后端约 6 s 就绪。追求「秒开」请用 zip 目录版。
+- **首次启动慢**：portable 要先自解压 471.3 MB 到临时目录，本机实测 36–48 s（Defender 实时扫描），之后 Electron 骨架立即出现，后端约 6 s 就绪。追求「秒开」请用 zip 目录版。
 - **杀软误报**：单文件自解压 + 未签名 exe 容易被 360/火绒/Defender 拦。兜底方案是解压 `yizhi-chengke-0.1.2-win64.zip` 直接运行目录版；不要为此关杀软。未做代码签名（时间与证书限制）。
 - **端口占用**：8710/8711/8712 全被占时启动失败并提示端口；需要先关掉占用程序。
 - **不做自动更新、不做签名**。
