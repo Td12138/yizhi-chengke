@@ -4,9 +4,12 @@
     <python> scripts/make_samples.py
 
 输出：
-    data/samples/01-二次函数图象与性质.png
-    data/samples/02-一元二次方程求根.png
-    data/samples/03-三角函数图像要点.png
+    apps/web/public/samples/sample-quadratic.png
+    apps/web/public/samples/sample-equation.png
+    apps/web/public/samples/sample-trig.png
+
+说明：样例图放在前端 public 目录，前端可直接以 /samples/xxx.png 取用，
+「用示例板书试一试」按钮即依赖这三个文件。
 
 约定：
 - 路径一律由脚本自身位置推导，不写死盘符；
@@ -17,6 +20,7 @@
 from __future__ import annotations
 
 import math
+import os
 import random
 from pathlib import Path
 
@@ -26,7 +30,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-OUTPUT_DIR = PROJECT_ROOT / "data" / "samples"
+OUTPUT_DIR = PROJECT_ROOT / "apps" / "web" / "public" / "samples"
 
 CANVAS_SIZE = (1600, 1200)
 MARGIN = 92
@@ -46,12 +50,14 @@ NOISE_SEED = 20261115
 NOISE_POINTS = 9000
 NOISE_ALPHA = 16
 
-# 中文字体候选（Windows 优先，其次 macOS / Linux），全部缺失时走英文版
+# 中文字体候选：Windows 字体目录由系统变量推导（不写死盘符），
+# 其余为 macOS / Linux 常见路径；全部缺失时走英文版
+_WINDIR = Path(os.environ.get("WINDIR", "C:/Windows"))
 CJK_FONT_CANDIDATES = (
-    "C:/Windows/Fonts/msyh.ttc",
-    "C:/Windows/Fonts/msyh.ttf",
-    "C:/Windows/Fonts/simhei.ttf",
-    "C:/Windows/Fonts/simsun.ttc",
+    str(_WINDIR / "Fonts" / "msyh.ttc"),
+    str(_WINDIR / "Fonts" / "msyh.ttf"),
+    str(_WINDIR / "Fonts" / "simhei.ttf"),
+    str(_WINDIR / "Fonts" / "simsun.ttc"),
     "/System/Library/Fonts/PingFang.ttc",
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 )
@@ -443,9 +449,9 @@ def make_trig(cjk: bool) -> Image.Image:
 # ---------------------------------------------------------------- 入口
 
 SAMPLES = (
-    ("01-二次函数图象与性质.png", make_quadratic),
-    ("02-一元二次方程求根.png", make_root_formula),
-    ("03-三角函数图像要点.png", make_trig),
+    ("sample-quadratic.png", make_quadratic),
+    ("sample-equation.png", make_root_formula),
+    ("sample-trig.png", make_trig),
 )
 
 
