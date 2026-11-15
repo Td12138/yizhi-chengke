@@ -77,6 +77,14 @@ def test_fill_polynomial_written_differently():
     assert judge(question, r"y=(x-2)^2-1") is True
 
 
+def test_superscript_digits_equal_caret_form():
+    """x² 与 x^2、10⁻¹ 与 10^-1 是同一个答案，NFKC 前要先展开上标。"""
+    assert normalize("x²") == "x^2"
+    assert judge({"qtype": "fill", "answer": r"$x^{2}$"}, "x²") is True
+    assert judge({"qtype": "fill", "answer": "10^-1"}, "10⁻¹") is True
+    assert judge({"qtype": "fill", "answer": r"$x^{2}$"}, "x³") is False
+
+
 def test_fill_wrong_answer():
     question = {"qtype": "fill", "answer": r"$x = 2$"}
     assert judge(question, "x=3") is False

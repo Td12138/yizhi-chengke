@@ -151,3 +151,28 @@ def test_app_data_dir_from_dotenv_takes_effect(tmp_path, monkeypatch):
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == str(data_dir)
+
+
+def test_env_int_falls_back_on_bad_value(monkeypatch):
+    monkeypatch.setenv("YIZHI_TEST_RETRY", "2x")
+    assert config._env_int("YIZHI_TEST_RETRY", 2) == 2
+    monkeypatch.setenv("YIZHI_TEST_RETRY", "5")
+    assert config._env_int("YIZHI_TEST_RETRY", 2) == 5
+    monkeypatch.delenv("YIZHI_TEST_RETRY")
+    assert config._env_int("YIZHI_TEST_RETRY", 2) == 2
+
+
+def test_dotenv_handles_bom_and_inline_comment(tmp_path, monkeypatch):
+    """.env 由记事本保存时常带 BOM 与行尾注释，两者都不能让首键失效。"""
+    monkeypatch.delenv("YIZHI_TEST_DOTENV", raising=False)
+    monkeypatch.delenv("YIZHI_TEST_QUOTED", raising=False)
+    path = tmp_path / ".env"
+    path.write_bytes(
+        b"\xef\xbb\xbfYIZHI_TEST_DOTENV=plain # comment\n"
+        b'YIZHI_TEST_QUOTED="a b # not comment"\n'
+    )
+
+    config._load_dotenv(path)
+
+    assert os.environ["YIZHI_TEST_DOTENV"] == "plain"
+    assert os.environ["YIZHI_TEST_QUOTED"] == "a b # not comment"

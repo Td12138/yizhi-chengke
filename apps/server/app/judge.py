@@ -42,9 +42,36 @@ NUMBER_TOLERANCE = 1e-9
 NOISE_PATTERN = re.compile(r"[\s$\\({})\\\\]")
 
 
+# 上标数字/符号：NFKC 会先把 x² 变成 x2，指数信息就丢了；必须提前换成 ^ 形式
+SUPERSCRIPT_TABLE = {
+    "⁰": "0",
+    "¹": "1",
+    "²": "2",
+    "³": "3",
+    "⁴": "4",
+    "⁵": "5",
+    "⁶": "6",
+    "⁷": "7",
+    "⁸": "8",
+    "⁹": "9",
+    "⁺": "+",
+    "⁻": "-",
+}
+SUPERSCRIPT_PATTERN = re.compile("[" + "".join(SUPERSCRIPT_TABLE) + "]+")
+
+
+def expand_superscripts(text: str) -> str:
+    """把上标串换成 `^` 形式：`x²` 与 `x^2`、`10⁻¹` 与 `10^-1` 视为同一种写法。"""
+    return SUPERSCRIPT_PATTERN.sub(
+        lambda match: "^" + "".join(SUPERSCRIPT_TABLE[ch] for ch in match.group()),
+        text,
+    )
+
+
 def normalize(text: str) -> str:
-    """判分归一化：NFKC 全角转半角（含 −），去掉空白、$、括号、反斜杠并统一小写。"""
-    text = unicodedata.normalize("NFKC", str(text)).translate(FULLWIDTH_TABLE)
+    """判分归一化：上标展开 → NFKC 全角转半角（含 −），去掉空白、$、括号、反斜杠并统一小写。"""
+    text = expand_superscripts(str(text))
+    text = unicodedata.normalize("NFKC", text).translate(FULLWIDTH_TABLE)
     return NOISE_PATTERN.sub("", text).lower()
 
 

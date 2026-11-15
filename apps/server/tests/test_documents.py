@@ -130,6 +130,13 @@ def test_plain_english_text_is_accepted():
     assert documents.is_text_usable([ENGLISH_PAGE]) is True
 
 
+def test_greek_math_text_is_accepted():
+    """数学 PDF 里的 α / β / θ 算可读字符，不能因为字母表没收录就判成乱码。"""
+    greek_page = "αβγθλμ" * 20
+    assert documents.readable_ratio(greek_page) == 1.0
+    assert documents.is_text_usable([greek_page]) is True
+
+
 def test_short_pages_are_rejected():
     assert documents.is_text_usable([GOOD_PAGE, "只有十几个字"]) is False
 
@@ -311,7 +318,8 @@ def test_docx_uncompressed_size_is_capped(tmp_path, monkeypatch):
     with pytest.raises(ValueError) as info:
         asyncio.run(documents.read_blocks(path))
 
-    assert "DOCX 解压后超过 50 MB，已拒绝" in str(info.value)
+    assert "DOCX 解压后超过" in str(info.value)
+    assert "已拒绝" in str(info.value)
 
 
 def test_corrupted_docx_maps_to_readable_error(tmp_path):

@@ -9,15 +9,38 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _load_dotenv(path: Path) -> None:
-    """极简 .env 加载：仅支持 KEY=VALUE，已存在的环境变量优先。"""
+    """极简 .env 加载：仅支持 KEY=VALUE，已存在的环境变量优先。
+
+    兼容记事本常见的两种写法：文件开头的 UTF-8 BOM，以及行尾 `# 注释`
+    （只在值没有引号时剥离；URL 里的 `#` 不带空格，不会被误删）。
+    """
     if not path.exists():
         return
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        value = value.strip()
+        if value[:1] in {'"', "'"}:
+            quote = value[0]
+            end = value.find(quote, 1)
+            value = value[1:end] if end > 0 else value.strip(quote)
+        else:
+            value = value.split(" #", 1)[0].strip()
+        os.environ.setdefault(key.strip(), value)
+
+
+def _env_int(name: str, default: int) -> int:
+    """整数环境变量：值写错时退回默认并留一行警告，不让服务起不来。"""
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        print(f"[config] {name}={raw!r} 不是整数，改用默认值 {default}")
+        return default
 
 
 # 必须先加载 .env 再读 APP_DATA_DIR：否则写在 .env 里的数据目录不生效
@@ -80,7 +103,7 @@ LLM_BASE_URL = resolve_provider_value(LLM_PROVIDER, "base_url", "LLM_BASE_URL")
 LLM_MODEL = resolve_provider_value(LLM_PROVIDER, "llm_model", "LLM_MODEL")
 
 # ---- 编排约束 ----
-VERIFY_MAX_RETRY = int(os.environ.get("VERIFY_MAX_RETRY", "2"))
+VERIFY_MAX_RETRY = _env_int("VERIFY_MAX_RETRY", 2)
 QUESTION_MIN = 1
 QUESTION_MAX = 12
 DEFAULT_QUESTION_COUNT = 5
@@ -94,7 +117,7 @@ CHUNK_PACE_SECONDS = 0.03
 
 # ---- 服务 ----
 HOST = os.environ.get("APP_HOST", "127.0.0.1")
-PORT = int(os.environ.get("APP_PORT", "8710"))
+PORT = _env_int("APP_PORT", 8710)
 
 
 def _env_flag(name: str, default: str = "false") -> bool:
@@ -109,6 +132,9 @@ def _env_flag(name: str, default: str = "false") -> bool:
 
 # ---- 可选静态托管（桌面封装用；缺省 false，Web 开发模式行为不变）----
 SERVE_WEB = _env_flag("SERVE_WEB")
+# 托管前端时给文档响应补 CSP：Electron 侧另有同名响应头（桌面外壳更早接管）
+# 只在 SERVE_WEB 生效；Vite 开发模式不经过后端，因此不会拦住 HMR 的内联脚本
+WEB_CSP = _env_flag("WEB_CSP", "true")
 # 前端产物目录：打包后由桌面外壳用 WEB_DIST 指到 resources/web
 WEB_DIST = Path(os.environ.get("WEB_DIST", str(PROJECT_ROOT / "apps" / "web" / "dist")))
 CORS_ORIGINS = [

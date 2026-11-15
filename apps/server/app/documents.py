@@ -29,8 +29,11 @@ from pypdf import PdfReader
 from . import config
 from .providers import fixtures, vlm
 
-# 可读字符：中日韩 + 日文假名 + 韩文 + 拉丁字母 + 数字
-READABLE_CHARS = re.compile(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7afA-Za-z0-9]")
+# 可读字符：中日韩 + 日文假名 + 韩文 + 希腊字母 + 拉丁字母 + 数字
+# 希腊字母单列：数学 PDF 的 α / β / θ 很常见，漏掉会把正常文本层判成乱码
+READABLE_CHARS = re.compile(
+    r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af\u0370-\u03ffA-Za-z0-9]"
+)
 # 乱码特征：控制符、替换字符，以及缺 ToUnicode 时最常见的拉丁扩展字符
 GARBLED_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f¶ÒÐÞþ\ufffd]")
 # 文本层可用阈值：整体可读占比、单页最少可读字数、乱码占比上限
@@ -200,7 +203,8 @@ def _check_docx_archive(path: Path) -> None:
     except (zipfile.BadZipFile, OSError) as exc:
         raise ValueError("DOCX 无法解析：文件损坏或已加密") from exc
     if total > MAX_DOCX_UNCOMPRESSED_BYTES:
-        raise ValueError("DOCX 解压后超过 50 MB，已拒绝")
+        limit_mb = MAX_DOCX_UNCOMPRESSED_BYTES // (1024 * 1024)
+        raise ValueError(f"DOCX 解压后超过 {limit_mb} MB，已拒绝")
 
 
 def docx_blocks(path: Path) -> list[dict]:

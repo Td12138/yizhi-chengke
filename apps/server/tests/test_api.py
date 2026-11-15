@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import db
-from app.main import app
+from app.main import app, csp_applies
 from app.providers import fixtures
 
 MISSING_ID = 99999
@@ -130,3 +130,13 @@ def test_generate_rejects_too_many_card_ids(client):
     )
 
     assert response.status_code == 422
+
+
+def test_csp_only_applies_to_served_frontend():
+    """CSP 只补在 SERVE_WEB 托管的页面上：API / SSE 不加，开关关闭也不加。"""
+    assert csp_applies("/", serve_web=True, enabled=True) is True
+    assert csp_applies("/assets/index.js", serve_web=True, enabled=True) is True
+    assert csp_applies("/api/health", serve_web=True, enabled=True) is False
+    assert csp_applies("/api/events/abc", serve_web=True, enabled=True) is False
+    assert csp_applies("/", serve_web=False, enabled=True) is False
+    assert csp_applies("/", serve_web=True, enabled=False) is False

@@ -8,7 +8,7 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,6 +29,21 @@ CARD_TITLE_MAX_CHARS = 120
 CARD_SUMMARY_MAX_CHARS = 500
 CARD_FORMULA_MAX_CHARS = 2000
 CARD_BODY_MAX_CHARS = 20000
+# 服务版本：与 apps/web、apps/desktop 的 package.json 保持一致
+APP_VERSION = "0.1.4"
+# 托管前端时的 CSP：与 apps/desktop/main.js 的 APP_CSP 同源
+# KaTeX 字体走 data:，拍照预览走 blob:，PDF 预览走 frame-src 'self'
+CSP_POLICY = "; ".join(
+    [
+        "default-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "font-src 'self' data:",
+        "media-src 'self' blob:",
+        "connect-src 'self'",
+        "frame-src 'self'",
+    ]
+)
 
 logger = logging.getLogger(__name__)
 orchestrator = Orchestrator(bus)
@@ -59,7 +74,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="一纸成课", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="一纸成课", version=APP_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,
@@ -67,6 +82,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(kb_router)
+
+
+def csp_applies(path: str, *, serve_web: bool, enabled: bool) -> bool:
+    """CSP 只补在托管的前端文档上：API / SSE 响应不需要，开发模式也不经过这里。"""
+    return serve_web and enabled and not path.startswith("/api/")
+
+
+@app.middleware("http")
+async def add_web_csp(request: Request, call_next):
+    """Web 模式（SERVE_WEB=1）补与桌面壳等价的 CSP，防止浏览器控制台报缺失。"""
+    response = await call_next(request)
+    if csp_applies(
+        request.url.path, serve_web=config.SERVE_WEB, enabled=config.WEB_CSP
+    ):
+        response.headers.setdefault("Content-Security-Policy", CSP_POLICY)
+    return response
 
 
 class GenerateRequest(BaseModel):

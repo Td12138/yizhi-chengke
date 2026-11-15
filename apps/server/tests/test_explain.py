@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
+from app.agents.explain import coerce_explain
 from app.providers import fixtures, llm
 
 AXIS_STEM = r"求 $y = x^{2} - 4x + 3$ 的对称轴。"
@@ -93,3 +94,44 @@ def test_llm_mock_routes_question_into_explain():
 def test_user_answer_is_quoted_only_when_present():
     assert "你填的是「-2」" in _explain(AXIS_STEM, "-2")["script"]
     assert "你填的是" not in _explain(AXIS_STEM, "")["script"]
+
+
+# ---- 真实模型输出归一 ----
+
+def test_coerce_keeps_valid_explain():
+    raw = {
+        "template": "function_slider",
+        "title": "对称轴",
+        "script": "先配方",
+        "params": {"a": "2", "b": 4, "c": -6, "x_min": -5, "x_max": 5},
+    }
+    result = coerce_explain(raw)
+
+    assert result["template"] == "function_slider"
+    assert result["params"] == {"a": 2.0, "b": 4.0, "c": -6.0, "x_min": -5.0, "x_max": 5.0}
+
+
+def test_coerce_drops_broken_params_but_keeps_script():
+    """少字段 / 字符串 / NaN / 反向区间都不该让前端画出错误图像。"""
+    broken = [
+        {"a": 1, "b": 2, "c": 3},  # 少 x_min / x_max
+        {"a": "宽", "b": 2, "c": 3, "x_min": -1, "x_max": 1},
+        {"a": 1, "b": 2, "c": 3, "x_min": float("nan"), "x_max": 1},
+        {"a": 1, "b": 2, "c": 3, "x_min": 1, "x_max": 1},
+        {"a": 1, "b": 2, "c": 3, "x_min": 5, "x_max": -5},
+        {"a": True, "b": 2, "c": 3, "x_min": -1, "x_max": 1},
+    ]
+    for params in broken:
+        result = coerce_explain({"script": "看文字", "params": params})
+        assert "params" not in result, params
+        assert result["script"] == "看文字"
+
+
+def test_coerce_handles_non_object_and_missing_fields():
+    assert coerce_explain(None) == {
+        "template": "text",
+        "title": "错题讲解",
+        "script": "",
+    }
+    result = coerce_explain({"title": 42, "script": None, "template": "  "})
+    assert result == {"template": "text", "title": "错题讲解", "script": ""}
