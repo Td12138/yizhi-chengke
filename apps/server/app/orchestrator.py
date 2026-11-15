@@ -91,6 +91,13 @@ class Orchestrator:
         改名失败只发事件、保留临时名，不影响卡片入库与原文件可读。
         扩展名沿用原文件（图片还是图片，PDF 还是 PDF）。
         """
+        # 只归档上传目录里的文件；内置样例等外部路径一律不动，
+        # 否则会把仓库里的素材改名（曾经把 public/samples 的样例图改名，导致入口 404）
+        try:
+            file_path.resolve().relative_to(config.UPLOAD_DIR.resolve())
+        except (ValueError, OSError):
+            return file_path
+
         title = storage.pick_title(blocks, cards)
         try:
             archived = storage.rename_after_ocr(file_path, title)

@@ -54,7 +54,7 @@ export default function CameraCapture({ onCapture, onClose }: Props) {
       if (name === "NotAllowedError") {
         setError("摄像头权限被拒绝：请在浏览器地址栏允许摄像头，然后重试。");
       } else if (name === "NotFoundError") {
-        setError("没有检测到可用摄像头，请改用「选择图片」。");
+        setError("没有检测到可用摄像头，请改用「选择文件」。");
       } else if (name === "NotReadableError") {
         setError("摄像头被其他程序占用（会议软件 / 相机），关闭后重试。");
       } else {

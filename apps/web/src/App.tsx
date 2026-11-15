@@ -11,6 +11,7 @@ import ReviewPanel from "./components/ReviewPanel";
 import RunProgress from "./components/RunProgress";
 import SourceLightbox from "./components/SourceLightbox";
 import SourceStrip from "./components/SourceStrip";
+import TourGuide, { shouldAutoStartTour } from "./components/TourGuide";
 import type { Board, RunInfo, Stage } from "./components/RunProgress";
 import {
   fetchGraph,
@@ -115,11 +116,72 @@ const STAGES: Record<string, Stage[]> = {
 /** 流式占位 id 的起点：done 之前题目/卡片可能还没有库 id，用负数占位（真实 id 恒为正） */
 const FIRST_TEMP_ID = 0;
 
+/**
+ * 上传约束：与后端 config.ALLOWED_SUFFIXES / DOC_SUFFIXES / MAX_*_BYTES 对齐。
+ * 后端改后缀或上限时，这里要同步，否则会在前端误拦或漏拦。
+ */
+const UPLOAD_ACCEPT = "image/*,.pdf,.docx,.txt,.md";
+const IMAGE_SUFFIXES = [".png", ".jpg", ".jpeg", ".webp", ".bmp"];
+const DOC_SUFFIXES = [".pdf", ".docx", ".txt", ".md"];
+const MB = 1024 * 1024;
+/** 图片上限 12MB（后端 MAX_UPLOAD_BYTES） */
+const MAX_IMAGE_BYTES = 12 * MB;
+/** 文档上限 20MB（后端 MAX_DOC_BYTES） */
+const MAX_DOC_BYTES = 20 * MB;
+const MAX_IMAGE_MB = MAX_IMAGE_BYTES / MB;
+const MAX_DOC_MB = MAX_DOC_BYTES / MB;
+const UPLOAD_FORMATS_HINT = "图片或 PDF/DOCX/TXT/MD";
+
 type LogItem = { seq: number; agent: string; phase: Status; message: string };
 type RunError = { step: string; message: string; retry: boolean };
 
+/** 上传预览：图片走缩略图，文档只显示文件名 + 类型徽标 */
+type FilePreview = { url: string; name: string; kind: "image" | "document" };
+type UploadCheck =
+  | { ok: true; kind: "image" | "document" }
+  | { ok: false; message: string };
+
 function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** 小写后缀（含点）；没有扩展名返回空串 */
+function suffixOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot).toLowerCase() : "";
+}
+
+/** 文档预览的徽标文字：PDF / DOCX / TXT / MD */
+function fileBadge(name: string): string {
+  return suffixOf(name).replace(".", "").toUpperCase() || "DOC";
+}
+
+/** 提交前校验：格式与大小都在前端拦下，给出明确原因，不等后端 400/413 */
+function checkUpload(file: File): UploadCheck {
+  const suffix = suffixOf(file.name);
+  const isImage = IMAGE_SUFFIXES.includes(suffix);
+  const isDoc = DOC_SUFFIXES.includes(suffix);
+  if (!isImage && !isDoc) {
+    return {
+      ok: false,
+      message: suffix
+        ? `不支持 ${suffix}，请上传${UPLOAD_FORMATS_HINT}`
+        : `文件「${file.name}」没有扩展名，请上传${UPLOAD_FORMATS_HINT}`,
+    };
+  }
+  if (isDoc && file.size > MAX_DOC_BYTES) {
+    return {
+      ok: false,
+      message: `文件过大（${MAX_DOC_MB}MB）：文档上限 ${MAX_DOC_MB}MB，请压缩后再试`,
+    };
+  }
+  if (isImage && file.size > MAX_IMAGE_BYTES) {
+    return {
+      ok: false,
+      message: `图片过大（${MAX_IMAGE_MB}MB）：图片上限 ${MAX_IMAGE_MB}MB，请压缩后再试`,
+    };
+  }
+  return { ok: true, kind: isDoc ? "document" : "image" };
 }
 
 /**
@@ -246,7 +308,7 @@ export default function App() {
   const [run, setRun] = useState<RunInfo | null>(null);
   const [error, setError] = useState<RunError | null>(null);
   const [notice, setNotice] = useState("");
-  const [preview, setPreview] = useState("");
+  const [preview, setPreview] = useState<FilePreview | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [plotExpression, setPlotExpression] = useState("x^2 - 4x + 3");
   const [requirement, setRequirement] = useState("给我出 5 道这页的变式题，中等难度");
@@ -266,6 +328,8 @@ export default function App() {
   const [lightbox, setLightbox] = useState<SourceItem | null>(null);
   /** 正在加载的示例图 URL，空串表示没有加载中的示例 */
   const [sampleLoading, setSampleLoading] = useState("");
+  /** 首次打开的新手引导开关（?tour=1 或 localStorage 没有完成标记时自动开） */
+  const [tourOpen, setTourOpen] = useState(false);
 
   const logRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLLIElement>(null);
@@ -346,6 +410,13 @@ export default function App() {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [logs]);
+
+  // 首次打开自动进引导；?tour=1 时无视完成标记强制展示一次
+  useEffect(() => {
+    if (shouldAutoStartTour()) setTourOpen(true);
+  }, []);
+
+  const closeTour = useCallback(() => setTourOpen(false), []);
 
   // 打开编辑后把卡片滚进视野（长列表里点下面卡片的场景）
   useEffect(() => {
@@ -542,10 +613,23 @@ export default function App() {
   const resultOf = (last: AgentEvent | null) => last?.payload?.result ?? null;
 
   async function ingest(file: File) {
+    // 先做后缀 / 大小校验：不支持的类型直接说清楚，不把文件发出去等 400
+    const check = checkUpload(file);
+    if ("message" in check) {
+      setError({ step: "上传识别 · 文件检查", message: check.message, retry: false });
+      return;
+    }
+
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
-    const url = URL.createObjectURL(file);
-    previewUrl.current = url;
-    setPreview(url);
+    previewUrl.current = "";
+    if (check.kind === "image") {
+      const url = URL.createObjectURL(file);
+      previewUrl.current = url;
+      setPreview({ url, name: file.name, kind: "image" });
+    } else {
+      // 文档不做缩略图（PDF 塞进 <img> 只会显示破图），只保留文件名
+      setPreview({ url: "", name: file.name, kind: "document" });
+    }
 
     await execute(
       "ingest",
@@ -864,13 +948,27 @@ export default function App() {
           <h2>1 · 拍一页纸</h2>
           <div
             className={`dropzone ${busy === "ingest" ? "dropzone-busy" : ""}`}
+            data-tour="upload"
             onDragOver={(event) => event.preventDefault()}
             onDrop={onDrop}
           >
             {preview ? (
-              <img src={preview} alt="上传预览" />
+              preview.kind === "image" ? (
+                <img src={preview.url} alt={`已选择：${preview.name}`} />
+              ) : (
+                <div className="dropzone-file">
+                  <span className="file-badge" aria-hidden="true">
+                    {fileBadge(preview.name)}
+                  </span>
+                  <span className="file-name" title={preview.name}>
+                    {preview.name}
+                  </span>
+                </div>
+              )
             ) : (
-              <p className="dropzone-hint">把板书 / 试卷 / 讲义拖进来</p>
+              <p className="dropzone-hint">
+                拖入图片或 PDF / DOCX 文件，也可以点下方按钮选择
+              </p>
             )}
             {busy === "ingest" && (
               <p className="dropzone-status" role="status">
@@ -879,10 +977,10 @@ export default function App() {
             )}
             <div className="dropzone-actions">
               <label className={`btn ${busy ? "btn-disabled" : ""}`}>
-                {busy === "ingest" ? "识别中…" : "选择图片"}
+                {busy === "ingest" ? "识别中…" : "选择文件"}
                 <input
                   type="file"
-                  accept="image/*"
+                  accept={UPLOAD_ACCEPT}
                   hidden
                   disabled={busy !== null}
                   onChange={(event) => {
@@ -1035,6 +1133,7 @@ export default function App() {
             />
             <button
               className="btn btn-primary"
+              data-tour="generate"
               disabled={busy !== null}
               onClick={() => void generate()}
             >
@@ -1042,7 +1141,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="questions">
+          <div className="questions" data-tour="questions">
             {questions.length > 0 && (
               <div className="verify-summary">
                 <span className="vs-item">{questions.length} 题</span>
@@ -1163,6 +1262,7 @@ export default function App() {
                     <button
                       type="button"
                       className="btn btn-sm btn-review"
+                      data-tour={index === 0 ? "review" : undefined}
                       disabled={busy !== null || reviewing || !ready}
                       title={
                         ready
@@ -1275,7 +1375,7 @@ export default function App() {
           )}
         </section>
 
-        <section className="panel panel-graph">
+        <section className="panel panel-graph" data-tour="graph">
           <div className="panel-head">
             <h2>6 · 知识谱系</h2>
             <button
@@ -1327,6 +1427,13 @@ export default function App() {
           </div>
         </section>
       </main>
+
+      {/* 拍照 / 看原图弹层打开时引导整体暂停（不抢按键），关掉弹层后同一步恢复 */}
+      <TourGuide
+        open={tourOpen}
+        paused={cameraOpen || lightbox !== null}
+        onClose={closeTour}
+      />
 
       {cameraOpen && (
         <CameraCapture
