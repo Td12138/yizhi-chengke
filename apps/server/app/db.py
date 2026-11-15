@@ -216,7 +216,14 @@ def list_questions(limit: int = 50) -> list[dict]:
         rows = conn.execute(
             "SELECT * FROM question ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
-    return [dict(r) for r in rows]
+    return [_decode_question(dict(row)) for row in rows]
+
+
+def _decode_question(row: dict) -> dict:
+    """options / card_ids 在库里是 JSON 文本，出库时还原成数组给前端。"""
+    row["options"] = json.loads(row.get("options") or "[]")
+    row["card_ids"] = json.loads(row.get("card_ids") or "[]")
+    return row
 
 
 def get_question(question_id: int) -> dict | None:
