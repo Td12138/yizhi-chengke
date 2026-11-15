@@ -120,7 +120,7 @@ pwsh -File build/prepare_runtime.ps1 -Python "<宿主 python 路径>"
 | 产物 | 体积 | 说明 |
 |---|---|---|
 | `release/YizhiChengke-0.1.2-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **136.9 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
-| `release/yizhi-chengke-0.1.2-win64.zip` | **200.7 MB** | `win-unpacked/` 整目录压缩，答辩现场推荐 |
+| `release/yizhi-chengke-0.1.2-win64.zip` | **200.5 MB** | `win-unpacked/` 整目录压缩，答辩现场推荐 |
 | `release/win-unpacked/一纸成课.exe` | 解压后 471.8 MB | 免安装目录版（Electron 357.2 MB + 内置 Python 112.1 MB） |
 
 内置 Python 运行时单独 112.1 MB（sympy 约 69 MB；已剔除全部 `tests/` 目录，省 31 MB）。
