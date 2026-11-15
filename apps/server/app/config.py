@@ -6,7 +6,8 @@ import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DATA_DIR = PROJECT_ROOT / "data"
+# 桌面版由 Electron 用 APP_DATA_DIR 指到用户可写目录；缺省仍是仓库内 data/
+DATA_DIR = Path(os.environ.get("APP_DATA_DIR") or str(PROJECT_ROOT / "data"))
 UPLOAD_DIR = DATA_DIR / "uploads"
 DB_PATH = DATA_DIR / "yizhi.db"
 
@@ -86,6 +87,22 @@ RAG_TOP_K = 3
 # ---- 服务 ----
 HOST = os.environ.get("APP_HOST", "127.0.0.1")
 PORT = int(os.environ.get("APP_PORT", "8710"))
+
+
+def _env_flag(name: str, default: str = "false") -> bool:
+    """环境变量开关：1/true/yes/on 为真，其余为假。"""
+    return (os.environ.get(name, default) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+# ---- 可选静态托管（桌面封装用；缺省 false，Web 开发模式行为不变）----
+SERVE_WEB = _env_flag("SERVE_WEB")
+# 前端产物目录：打包后由桌面外壳用 WEB_DIST 指到 resources/web
+WEB_DIST = Path(os.environ.get("WEB_DIST", str(PROJECT_ROOT / "apps" / "web" / "dist")))
 CORS_ORIGINS = [
     o.strip()
     for o in os.environ.get(
@@ -96,6 +113,13 @@ CORS_ORIGINS = [
 
 # ---- 上传约束 ----
 ALLOWED_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+# 文档输入：PDF 常见字体子集缺 ToUnicode，解析时要走「文本检测 → 渲染兜底」双路径
+DOC_SUFFIXES = {".pdf", ".docx", ".txt", ".md"}
+# 后缀 → 输入类型；上传接口只认这张表，新增格式只改这里
+KIND_BY_SUFFIX = {
+    **{suffix: "image" for suffix in ALLOWED_SUFFIXES},
+    **{suffix: "document" for suffix in DOC_SUFFIXES},
+}
 IMAGE_MIME_BY_SUFFIX = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -104,6 +128,24 @@ IMAGE_MIME_BY_SUFFIX = {
     ".bmp": "image/bmp",
 }
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
+MAX_DOC_BYTES = 20 * 1024 * 1024
+# 归档文件的下载 MIME：/api/sources/{id}/image 也用来取 PDF / DOCX / 文本
+SOURCE_MIME_BY_SUFFIX = {
+    **IMAGE_MIME_BY_SUFFIX,
+    ".pdf": "application/pdf",
+    ".docx": (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ),
+    ".txt": "text/plain; charset=utf-8",
+    ".md": "text/markdown; charset=utf-8",
+}
+FALLBACK_MIME = "application/octet-stream"
+
+# ---- 文档解析约束 ----
+# PDF 文本层不可用时，最多渲染前 N 页交视觉模型（180 DPI）
+MAX_DOC_PAGES = 3
+# 单份文档最多取多少字符：防止整本书把上下文撑爆
+MAX_DOC_CHARS = 20000
 
 
 def ensure_dirs() -> None:

@@ -1,0 +1,38 @@
+% 一纸成课 · 技术文档 PDF 排版样式（由 export-pdf.ps1 通过 --include-in-header 注入）
+\usepackage{etoolbox}
+\usepackage{fvextra}
+
+% 代码块：字号略小、超长行自动折行，避免右侧溢出
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\},fontsize=\footnotesize}
+
+% 表格：字号小一档、行距收紧，窄页面下仍能放下 4–5 列
+\AtBeginEnvironment{longtable}{\footnotesize}
+\renewcommand{\arraystretch}{0.92}
+\setlength{\LTpre}{2pt}
+\setlength{\LTpost}{4pt}
+
+% 目录独占一页（只在 -Toc 时生效）
+\apptocmd{\tableofcontents}{\clearpage}{}{}
+
+% 图注与表注字号，图题用中文「图 N」
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\renewcommand{\figurename}{图}
+\renewcommand{\tablename}{表}
+
+% 段落间距略收紧（正文 10 pt + 1.35 倍行距已由 pandoc 变量设置）
+\setlength{\parskip}{2pt}
+\setlength{\parindent}{0pt}
+
+% 正文里少量符号（勾/叉/箭头/不等号）在主字体中缺字形，统一映射到数学符号，
+% 只影响排版，不改 Markdown 源文件内容。
+\usepackage{newunicodechar}
+\newunicodechar{✅}{\ensuremath{\checkmark}}
+\newunicodechar{✓}{\ensuremath{\checkmark}}
+\newunicodechar{❌}{\ensuremath{\times}}
+\newunicodechar{✕}{\ensuremath{\times}}
+\newunicodechar{↔}{\ensuremath{\leftrightarrow}}
+\newunicodechar{≤}{\ensuremath{\leq}}
+\newunicodechar{≥}{\ensuremath{\geq}}
+\newunicodechar{−}{\ensuremath{-}}
+\newunicodechar{◐}{部分}

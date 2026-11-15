@@ -57,7 +57,9 @@ def _mock(task: str, payload: dict[str, Any]) -> dict[str, Any]:
     if task == "compose":
         return {"questions": fixtures.mock_questions(int(payload.get("round", 1)))}
     if task == "explain":
-        return dict(fixtures.MOCK_EXPLAIN)
+        return fixtures.mock_explain(
+            payload.get("question") or {}, str(payload.get("user_answer", ""))
+        )
     if task == "answer":
         query = str(payload.get("query", ""))
         cards = search_cards(query, config.RAG_TOP_K)

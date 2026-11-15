@@ -26,6 +26,34 @@ def test_fill_exact_match():
     assert judge(question, "4") is True
 
 
+def test_fill_accepts_bare_value_for_equation_answer():
+    # 标准答案是「x = 2」时，只填等号右边的 2 也算对
+    question = {"qtype": "fill", "answer": r"$x = 2$"}
+    assert judge(question, "2") is True
+
+
+def test_fill_equivalent_forms_are_all_accepted():
+    cases = [
+        ("$x = 2$", "x=2"),
+        ("$-1$", "-1"),
+        ("$(2,\\ -1)$", "(2,-1)"),
+        ("$(2,\\ -1)$", "2, -1"),
+        ("$-1$", "－1"),  # 全角负号
+        ("$x = 2$", "２"),  # 全角数字
+        ("$2$", "2.0"),
+    ]
+    for answer, given in cases:
+        assert judge({"qtype": "fill", "answer": answer}, given) is True, given
+
+
+def test_fill_still_rejects_wrong_answers():
+    question = {"qtype": "fill", "answer": r"$x = 2$"}
+    assert judge(question, "3") is False
+    assert judge(question, "x=3") is False
+    assert judge(question, "-2") is False
+    assert judge({"qtype": "fill", "answer": r"$(2,\ -1)$"}, "(-2, 1)") is False
+
+
 def test_fill_ignores_latex_wrapper_and_spaces():
     question = {"qtype": "fill", "answer": r"$x = 2$"}
     assert judge(question, "x=2") is True

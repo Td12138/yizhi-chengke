@@ -10,10 +10,12 @@ from pathlib import Path
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import config, db
 from .events import bus
+from .kb_routes import router as kb_router
 from .orchestrator import Orchestrator, new_run_id
 
 orchestrator = Orchestrator(bus)
@@ -41,6 +43,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(kb_router)
 
 
 class GenerateRequest(BaseModel):
@@ -78,22 +81,30 @@ async def health() -> dict:
 
 @app.post("/api/ingest")
 async def ingest(file: UploadFile = File(...)) -> dict:
+    """上传入口：图片与文档共用，返回 kind 供前端区分进度文案。"""
     suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in config.ALLOWED_SUFFIXES:
-        raise HTTPException(400, f"仅支持 {sorted(config.ALLOWED_SUFFIXES)}")
+    kind = config.KIND_BY_SUFFIX.get(suffix)
+    if kind is None:
+        raise HTTPException(
+            400,
+            "仅支持图片 "
+            f"{sorted(config.ALLOWED_SUFFIXES)} 或文档 {sorted(config.DOC_SUFFIXES)}",
+        )
 
+    # 文档比图片大得多（PDF 常常十几 MB），按类型给不同上限
+    limit = config.MAX_DOC_BYTES if kind == "document" else config.MAX_UPLOAD_BYTES
     data = await file.read()
-    if len(data) > config.MAX_UPLOAD_BYTES:
-        raise HTTPException(400, "图片超过大小上限")
+    if len(data) > limit:
+        raise HTTPException(413, f"文件超过 {limit // (1024 * 1024)} MB 上限")
 
     config.ensure_dirs()
-    image_path = config.UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
-    image_path.write_bytes(data)
+    upload_path = config.UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
+    upload_path.write_bytes(data)
 
     run_id = new_run_id()
     bus.create(run_id)
-    spawn(orchestrator.ingest(run_id, image_path))
-    return {"run_id": run_id}
+    spawn(orchestrator.ingest(run_id, upload_path))
+    return {"run_id": run_id, "kind": kind}
 
 
 @app.get("/api/events/{run_id}")
@@ -119,6 +130,17 @@ async def patch_card(card_id: int, req: CardPatch) -> dict:
     return card
 
 
+@app.get("/api/sources")
+async def sources() -> dict:
+    """原图归档列表：按上传时间倒序，image_url 可直接取原图。"""
+    return {
+        "sources": [
+            {**source, "image_url": f"/api/sources/{source['id']}/image"}
+            for source in db.list_sources()
+        ]
+    }
+
+
 @app.get("/api/sources/{source_id}")
 async def source_detail(source_id: int) -> dict:
     """来源详情：识别原文块 + 该来源的卡片，用于原图与结果并排核对。"""
@@ -127,6 +149,7 @@ async def source_detail(source_id: int) -> dict:
         raise HTTPException(404, f"来源 {source_id} 不存在")
     return {
         "id": source["id"],
+        "display_name": source.get("display_name") or Path(source["image_path"]).name,
         "image_path": source["image_path"],
         "created_at": source["created_at"],
         "blocks": source["blocks"],
@@ -136,13 +159,16 @@ async def source_detail(source_id: int) -> dict:
 
 @app.get("/api/sources/{source_id}/image")
 async def source_image(source_id: int) -> FileResponse:
+    """归档文件下载：图片按图片 MIME，PDF / DOCX / 文本按各自 MIME。"""
     source = db.get_source(source_id)
     if source is None:
         raise HTTPException(404, f"来源 {source_id} 不存在")
     image_path = Path(source["image_path"])
     if not image_path.is_file():
-        raise HTTPException(404, "原图文件已不存在")
-    mime = config.IMAGE_MIME_BY_SUFFIX.get(image_path.suffix.lower(), "image/png")
+        raise HTTPException(404, "原文件已不存在")
+    mime = config.SOURCE_MIME_BY_SUFFIX.get(
+        image_path.suffix.lower(), config.FALLBACK_MIME
+    )
     return FileResponse(image_path, media_type=mime)
 
 
@@ -174,3 +200,23 @@ async def ask(req: AskRequest) -> dict:
     bus.create(run_id)
     spawn(orchestrator.ask(run_id, req.query))
     return {"run_id": run_id}
+
+
+def _mount_web() -> None:
+    """可选静态托管：SERVE_WEB=1 时把前端 dist 挂到 `/`。
+
+    必须在所有 /api/* 路由注册之后调用：Starlette 按注册顺序匹配，
+    后挂的 `/` 不会遮住先前注册的接口。缺省（SERVE_WEB=false）不挂载，
+    Web 开发模式（vite 5173 + 后端 8710）行为与之前完全一致。
+    """
+    if not config.SERVE_WEB:
+        return
+    dist = config.WEB_DIST
+    if not (dist / "index.html").is_file():
+        print(f"[serve-web] 警告：未找到前端产物 {dist}，本次仅提供 API。")
+        return
+    app.mount("/", StaticFiles(directory=str(dist), html=True), name="web")
+    print(f"[serve-web] 已挂载前端 {dist} → http://{config.HOST}:{config.PORT}/")
+
+
+_mount_web()
