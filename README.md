@@ -96,6 +96,7 @@ python apps/server/scripts/reset_demo.py
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 空 | 同上 |
 | `VERIFY_MAX_RETRY` | `2` | 命题↔质检**重试**轮数（首轮 + 最多 2 次重试） |
 | `APP_PORT` | `8710` | 后端端口，改端口需同步改 `apps/web/vite.config.ts` 的 `BACKEND` |
+| `WEB_CSP` | `1` | `SERVE_WEB=1` 托管前端时补 CSP 响应头；排障可设 `0` 关闭 |
 
 缺字段按默认值补，未知字段忽略，旧配置原样能跑。
 
@@ -103,7 +104,7 @@ python apps/server/scripts/reset_demo.py
 
 | 功能 | 说明 |
 |---|---|
-| 拍照 / 上传 | 摄像头直接拍（`getUserMedia`）或选图；图片最长边压到 1920 再上传 |
+| 拍照 / 上传 | 摄像头直接拍（`getUserMedia`，拍照时最长边压到 1920）或选图；选择文件按原图上传，图片上限 12MB |
 | **PDF / DOCX** | 支持文档输入：PDF 文本层可用则直读；乱码（扫描件/子集字体）在**接真实 VLM 时**渲染成图送视觉模型，缺省 mock 不读图、按文件名取样例；DOCX 按原文顺序解析段落与表格 |
 | 知识点卡片 | 识别结果结构化成卡片，可**人工修正**（标题/摘要/公式/正文四个字段） |
 | 一句话出题 | 按自然语言需求生成变式题，KaTeX 渲染 |
@@ -164,7 +165,8 @@ sequenceDiagram
 | 路径 | 内容 |
 |---|---|
 | `apps/server/app/` | FastAPI 服务、编排器、七个 Agent、Provider 层 |
-| `apps/server/tests/` | 22 个测试文件、284 个用例（`pytest` 一条命令跑完，约 48 s）：判分、验算、检索、编排回环、批改、知识库统计、接口 |
+| `apps/server/tests/` | 22 个测试文件、292 个用例（`pytest` 一条命令跑完，约 45 s）：判分、验算、检索、编排回环、批改、知识库统计、接口 |
+| `apps/web/tests/` | 11 个前端纯函数用例（`npm test`，Node 自带测试器）：上传闸门、流式字段归一、批改结论清洗 |
 | `apps/server/scripts/` | 演示前重置脚本 |
 | `apps/web/src/` | React 前端：看板、练习卷、摄像头、函数图像、知识谱系 |
 | `docs/技术文档.md` / `.pdf` | 技术文档正文与提交版 PDF |
@@ -188,7 +190,7 @@ GitHub 上「错题本 / AI 出题」类项目不少，但**对生成内容的�
 | 生成题目是否正确 | 不验证，模型说了算 | **sympy 代入验算，不通过打回重生成** |
 | 过程是否可见 | 只给结果 | 七个 Agent 实时看板，谁驳回了谁一眼可见 |
 | 没有 API Key 能否跑 | 需要 OpenAI / Gemini Key | **mock 模式零依赖跑通全链路** |
-| 交付形态 | Web 服务 / Docker | Web + 桌面版：zip 解压即用；另出 136.8 MB 单文件（首次自解压 36–48 s，不主推） |
+| 交付形态 | Web 服务 / Docker | Web + 桌面版：zip 解压即用；另出 136.9 MB 单文件（首次自解压 36–48 s，不主推） |
 | 知识沉淀 | 错题列表 | 知识点卡片 + 被问次数 + 知识谱系 |
 
 ## 边界与诚实声明
@@ -207,8 +209,13 @@ GitHub 上「错题本 / AI 出题」类项目不少，但**对生成内容的�
 | README 复现指南 | 本文件 |
 | AI 对话快照 | `docs/ai-logs/`，索引见 `docs/ai-logs/README.md` |
 | 技术文档 | `docs/技术文档.pdf`（正文 `docs/技术文档.md`） |
-| 桌面版（可选） | [Releases](https://github.com/Td12138/yizhi-chengke/releases)：`yizhi-chengke-0.1.3-win64.zip` 解压即用（推荐，约 0.2s 出窗），`YizhiChengke-0.1.3-portable.exe` 单文件（首次解压 36–48s） |
+| 桌面版（可选） | [Releases](https://github.com/Td12138/yizhi-chengke/releases)：`yizhi-chengke-0.1.4-win64.zip` 解压即用（推荐，约 0.2s 出窗，200.5 MB），`YizhiChengke-0.1.4-portable.exe` 单文件（136.9 MB，首次解压 36–48s） |
 | 演示视频 | 随作品在赛事平台提交，不入库 |
+
+v0.1.4 产物校验（SHA256）：
+
+- `yizhi-chengke-0.1.4-win64.zip`：`C14D7B7745B85D4B549DA778985A206F4F25BBA44DDA229E2528225C2C022EEE`
+- `YizhiChengke-0.1.4-portable.exe`：`23A67F283B0ED5DB9167AAA584C0601AEB46A98C74ACAA1FBAABF1404A6209C4`
 
 ## 红线
 

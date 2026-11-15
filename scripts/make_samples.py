@@ -13,8 +13,8 @@
 
 约定：
 - 路径一律由脚本自身位置推导，不写死盘符；
-- 中文字体优先 C:/Windows/Fonts/msyh.ttc，找不到任何中文字体时
-  自动退化为英文版并在终端打印说明（图仍可生成，用于流程演示）。
+- 中文字体按系统变量推导（Windows 取 `%WINDIR%\Fonts`，另带 macOS / Linux 候选），
+  找不到任何中文字体时自动退化为英文版并在终端打印说明（图仍可生成，用于流程演示）。
 """
 
 from __future__ import annotations
@@ -461,7 +461,7 @@ def main() -> int:
     if HAS_CJK:
         print(f"中文字体：{FONT_PATH}")
     else:
-        print("未找到中文字体（C:/Windows/Fonts/msyh.ttc 等），已退化为英文版样例图。")
+        print("未找到中文字体（Windows Fonts / PingFang / Noto CJK 均不可用），已退化为英文版样例图。")
         print("如需中文图，请安装微软雅黑或在 CJK_FONT_CANDIDATES 中补充字体路径。")
 
     failures = 0

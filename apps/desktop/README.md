@@ -9,7 +9,7 @@
 |---|---|---|
 | Web（主路径） | 后端 `python -m uvicorn app.main:app --port 8710`；前端 `cd apps/web && npm run dev` → <http://127.0.0.1:5173> | 开发、录屏、改代码 |
 | Electron dev | `cd apps/desktop && npm run dev`（可选 `YIZHI_PYTHON` 指定解释器） | 调试外壳 |
-| 打包产物 | 双击 `一纸成课-portable.exe`，或解压 `yizhi-chengke-0.1.3-win64.zip` 后运行 `一纸成课.exe` | 交给评委 / 答辩现场 |
+| 打包产物 | 双击 `一纸成课-portable.exe`，或解压 `yizhi-chengke-0.1.4-win64.zip` 后运行 `一纸成课.exe` | 交给评委 / 答辩现场 |
 
 ### Electron dev
 
@@ -45,7 +45,7 @@ npm run package:dir               # 只出 win-unpacked（最快，验证用）
 npm run package:nsis              # 只出 NSIS 安装包（可选）
 ```
 
-产物文件名用英文（`YizhiChengke-0.1.3-portable.exe`），避免中文路径在部分解压工具/CI 中出问题；`package:zip` 会额外复制一份中文名 `一纸成课-portable.exe` 方便直接发人。窗口与安装后的显示名仍是「一纸成课」。
+产物文件名用英文（`YizhiChengke-0.1.4-portable.exe`），避免中文路径在部分解压工具/CI 中出问题；`package:zip` 会额外复制一份中文名 `一纸成课-portable.exe` 方便直接发人。窗口与安装后的显示名仍是「一纸成课」。
 
 构建直接用 `node_modules/electron/dist`（`build.electronDist`），不再联网下载 Electron；若本机杀软/网盘同步盘干扰打包，可用
 `npx electron-builder --win --x64 --config.directories.output=<另一块盘的空目录>` 换输出盘，再把产物拷回 `release/`。
@@ -119,8 +119,8 @@ pwsh -File build/prepare_runtime.ps1 -Python "<宿主 python 路径>"
 
 | 产物 | 体积 | 说明 |
 |---|---|---|
-| `release/YizhiChengke-0.1.3-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **136.8 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
-| `release/yizhi-chengke-0.1.3-win64.zip` | **200.5 MB** | `win-unpacked/` 整目录压缩，答辩现场推荐 |
+| `release/YizhiChengke-0.1.4-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **136.9 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
+| `release/yizhi-chengke-0.1.4-win64.zip` | **200.5 MB** | `win-unpacked/` 整目录压缩，答辩现场推荐 |
 | `release/win-unpacked/一纸成课.exe` | 解压后 471.3 MB | 免安装目录版（Electron 357.2 MB + 内置 Python 111.6 MB） |
 
 内置 Python 运行时单独 111.6 MB（sympy 约 69 MB；已剔除全部 `tests/` 目录，省 31 MB）。
@@ -150,7 +150,7 @@ portable 是 NSIS 自解压：**每次双击都要把 471.3 MB 解到 `%TEMP%\<�
 目录确实变成 `%TEMP%\yizhi-chengke-0.1.0` 并保留，但**第二次启动仍要 37.5 s**（时间戳显示目录被整个
 重写，electron-builder 每次都会重新解压），达不到「秒开」，因此**已回退该配置**。
 
-> **结论：主推 `yizhi-chengke-0.1.3-win64.zip`（解压一次，之后双击 0.2 s 出窗、~5 s 进界面）。**
+> **结论：主推 `yizhi-chengke-0.1.4-win64.zip`（解压一次，之后双击 0.2 s 出窗、~5 s 进界面）。**
 > portable 仅用于发给评委自行体验，首次需要耐心等 40 s 左右；不存在可清理的缓存（临时目录退出即删）。
 
 ## 已验证（2026-11-15）
@@ -170,12 +170,13 @@ portable 是 NSIS 自解压：**每次双击都要把 471.3 MB 解到 `%TEMP%\<�
 | 摄像头（假设备，打包版） | `getUserMedia` 返回 `fake_device_0`；点「打开摄像头」后 `video.readyState=4`、`paused=false`、无错误提示；日志「放行媒体权限：video」 |
 | 启动页 / 错误页配色 | 与主界面同一套浅色 token（`#f7f9fc` / `#ffffff` / `#0f766e`），无深色闪屏 |
 | 关闭窗口 | `taskkill /T /F` 后端，残留 `一纸成课*` / `python*` 进程 0 个，监听端口 0 个 |
-| `pytest apps/server/tests -q` | **284 passed**（22 个测试文件，约 48 s） |
+| `pytest apps/server/tests -q` | **292 passed**（22 个测试文件，约 45 s） |
+| `npm --prefix apps/web test` | **11 passed**（前端纯函数单测，Node 自带测试器） |
 
 ## 已知限制
 
 - **首次启动慢**：portable 要先自解压 471.3 MB 到临时目录，本机实测 36–48 s（Defender 实时扫描），之后 Electron 骨架立即出现，后端约 6 s 就绪。追求「秒开」请用 zip 目录版。
-- **杀软误报**：单文件自解压 + 未签名 exe 容易被 360/火绒/Defender 拦。兜底方案是解压 `yizhi-chengke-0.1.3-win64.zip` 直接运行目录版；不要为此关杀软。未做代码签名（时间与证书限制）。
+- **杀软误报**：单文件自解压 + 未签名 exe 容易被 360/火绒/Defender 拦。兜底方案是解压 `yizhi-chengke-0.1.4-win64.zip` 直接运行目录版；不要为此关杀软。未做代码签名（时间与证书限制）。
 - **端口占用**：8710/8711/8712 全被占时启动失败并提示端口；需要先关掉占用程序。
 - **不做自动更新、不做签名**。
 - **打包版不读仓库 `.env`**：如需切真实模型，在启动前设置同名环境变量（`VLM_PROVIDER` 等），或后续版本再补设置界面。
