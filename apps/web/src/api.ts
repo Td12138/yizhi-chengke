@@ -1,4 +1,11 @@
-import type { AgentEvent, Card, CardPatch } from "./types";
+import type {
+  AgentEvent,
+  Card,
+  CardPatch,
+  GraphData,
+  SourcesData,
+  StatsData,
+} from "./types";
 
 /** 单次运行的等待上限，避免看板卡死 */
 const RUN_TIMEOUT_MS = 120_000;
@@ -111,9 +118,23 @@ export function updateCard(id: number, patch: CardPatch): Promise<Card> {
   return patchJSON<Card>(`/api/cards/${id}`, patch);
 }
 
+/** 知识谱系图：节点 = 知识点卡片，边 = 共同出现关系。 */
+export function fetchGraph(): Promise<GraphData> {
+  return getJSON<GraphData>("/api/graph");
+}
+
+/** 使用统计：最常被问的知识点与提问 / 出题次数。 */
+export function fetchStats(): Promise<StatsData> {
+  return getJSON<StatsData>("/api/stats");
+}
+
+/** 已归档的原图列表（上传 / 拍照后按识别结果重命名）。 */
+export function fetchSources(): Promise<SourcesData> {
+  return getJSON<SourcesData>("/api/sources");
+}
+
 /** 事件流的结束原因：调用方据此给出可重试的提示，而非静默失败。 */
 export type StreamReason = "done" | "error" | "timeout" | "broken";
-
 export type StreamOutcome = {
   /** 最后收到的事件（可能为 null） */
   last: AgentEvent | null;

@@ -1,19 +1,34 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import AgentBoard, { AGENTS } from "./components/AgentBoard";
 import CameraCapture from "./components/CameraCapture";
 import CardEditor from "./components/CardEditor";
+import FunctionPlot from "./components/FunctionPlot";
 import FunctionSlider from "./components/FunctionSlider";
+import KnowledgeGraph from "./components/KnowledgeGraph";
 import MathText from "./components/MathText";
 import RunProgress from "./components/RunProgress";
+import SourceLightbox from "./components/SourceLightbox";
+import SourceStrip from "./components/SourceStrip";
 import type { Board, RunInfo, Stage } from "./components/RunProgress";
-import { getJSON, postFile, postJSON, streamRun } from "./api";
+import {
+  fetchGraph,
+  fetchSources,
+  fetchStats,
+  getJSON,
+  postFile,
+  postJSON,
+  streamRun,
+} from "./api";
 import type {
   AgentEvent,
   AskAnswer,
   Card,
   Explain,
+  GraphData,
   Question,
+  SourceItem,
+  StatsData,
   Status,
 } from "./types";
 
@@ -26,6 +41,34 @@ const MAX_LOGS = 200;
 /** 与 api.ts 的 RUN_TIMEOUT_MS 对齐，仅用于文案展示 */
 const RUN_TIMEOUT_S = 120;
 const NOTICE_MS = 4_000;
+/** 「最常被问」列表条数，与后端 /api/stats 的默认返回量对齐 */
+const TOP_ASKED = 10;
+/** 卡片区最多显示几张来源原图缩略（面板窄，多了要横向滚动） */
+const CARD_SOURCE_LIMIT = 4;
+/** 知识库图册展示最近多少张来源原图 */
+const GALLERY_SOURCE_LIMIT = 12;
+/** 练习题错位淡入的间隔，上限 400ms 防止长卷等待过久 */
+const QUESTION_STAGGER_MS = 40;
+const QUESTION_STAGGER_MAX_MS = 400;
+
+/** 示例板书：public/samples 下的静态图，点击后复用正常上传流程 */
+const SAMPLES = [
+  {
+    label: "二次函数图象",
+    file: "2026-11-15-二次函数图象与性质.png",
+    url: "/samples/sample-quadratic.png",
+  },
+  {
+    label: "一元二次方程求根",
+    file: "2026-11-15-一元二次方程求根.png",
+    url: "/samples/sample-equation.png",
+  },
+  {
+    label: "三角函数图像",
+    file: "2026-11-15-三角函数图像要点.png",
+    url: "/samples/sample-trig.png",
+  },
+];
 
 const ACTION_LABEL: Record<string, string> = {
   ingest: "上传识别",
@@ -69,6 +112,7 @@ export default function App() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editedIds, setEditedIds] = useState<number[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [verifyRejects, setVerifyRejects] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [results, setResults] = useState<Record<number, { correct: boolean }>>({});
   const [explain, setExplain] = useState<{ qid: number; data: Explain } | null>(null);
@@ -80,6 +124,7 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [preview, setPreview] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [plotExpression, setPlotExpression] = useState("x^2 - 4x + 3");
   const [requirement, setRequirement] = useState("给我出 5 道这页的变式题，中等难度");
   const [count, setCount] = useState(5);
   const [askQuery, setAskQuery] = useState("");
@@ -88,6 +133,15 @@ export default function App() {
     vlm_provider: string;
     llm_provider: string;
   } | null>(null);
+  const [graph, setGraph] = useState<GraphData | null>(null);
+  const [stats, setStats] = useState<StatsData | null>(null);
+  const [graphLoading, setGraphLoading] = useState(false);
+  const [graphError, setGraphError] = useState("");
+  const [sources, setSources] = useState<SourceItem[]>([]);
+  const [sourcesError, setSourcesError] = useState("");
+  const [lightbox, setLightbox] = useState<SourceItem | null>(null);
+  /** 正在加载的示例图 URL，空串表示没有加载中的示例 */
+  const [sampleLoading, setSampleLoading] = useState("");
 
   const logRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLLIElement>(null);
@@ -95,6 +149,44 @@ export default function App() {
   const retryRef = useRef<(() => void) | null>(null);
   const noticeTimer = useRef<number | undefined>(undefined);
   const previewUrl = useRef("");
+  /** 图谱请求序号：只认最后一次，避免连点刷新时旧响应覆盖新数据 */
+  const graphReq = useRef(0);
+
+  /**
+   * 拉取知识谱系、统计与归档原图。
+   * 供四处调用：进入页面、上传识别后、追问 / 出题成功后、面板刷新按钮。
+   */
+  const loadKnowledge = useCallback(async () => {
+    const token = graphReq.current + 1;
+    graphReq.current = token;
+    setGraphLoading(true);
+    setGraphError("");
+    setSourcesError("");
+    const [knowledgeResult, sourcesResult] = await Promise.allSettled([
+      Promise.all([fetchGraph(), fetchStats()]),
+      fetchSources(),
+    ]);
+    if (graphReq.current !== token) return;
+
+    if (knowledgeResult.status === "fulfilled") {
+      setGraph(knowledgeResult.value[0]);
+      setStats(knowledgeResult.value[1]);
+    } else {
+      setGraphError(describeError(knowledgeResult.reason));
+    }
+
+    if (sourcesResult.status === "fulfilled") {
+      setSources(sourcesResult.value.sources ?? []);
+    } else {
+      setSourcesError(describeError(sourcesResult.reason));
+    }
+
+    setGraphLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void loadKnowledge();
+  }, [loadKnowledge]);
 
   useEffect(() => {
     getJSON<{ cards: Card[] }>("/api/cards")
@@ -143,6 +235,10 @@ export default function App() {
       ...prev,
       [event.agent]: { phase: event.phase, message },
     }));
+    // 记录质检驳回轮数：展示在练习卷头部，作为「答案可验证」的可见证据
+    if (event.agent === "verify" && event.phase === "rejected") {
+      setVerifyRejects((prev) => prev + 1);
+    }
     seq.current += 1;
     setLogs((prev) =>
       [
@@ -253,8 +349,39 @@ export default function App() {
         setCards(data.cards);
         setEditingId(null);
         flash(`已入库，当前共 ${data.cards.length} 张卡片`);
+        // 新卡片会带出新节点 / 新边
+        void loadKnowledge();
       }
     );
+  }
+
+  /** 示例板书：取静态图 → 包成 File → 走同一条 ingest 流程 */
+  async function loadSample(sample: (typeof SAMPLES)[number]) {
+    if (busy !== null || sampleLoading) return;
+    setSampleLoading(sample.url);
+    setError(null);
+    try {
+      const response = await fetch(sample.url);
+      if (!response.ok) {
+        throw new Error(`示例图加载失败（HTTP ${response.status}）`);
+      }
+      const blob = await response.blob();
+      const file = new File([blob], sample.file, {
+        type: blob.type || "image/png",
+      });
+      await ingest(file);
+    } catch (err) {
+      setError({
+        step: `示例板书 · ${sample.label}`,
+        message:
+          err instanceof TypeError
+            ? "示例图下载失败，请检查网络或静态资源是否可访问"
+            : describeError(err),
+        retry: false,
+      });
+    } finally {
+      setSampleLoading("");
+    }
   }
 
   async function generate() {
@@ -275,6 +402,8 @@ export default function App() {
         setAnswers({});
         setResults({});
         setExplain(null);
+        // 出题计数变了，重拉谱系让节点大小 / 颜色跟着变
+        void loadKnowledge();
       }
     );
   }
@@ -313,6 +442,8 @@ export default function App() {
         const result = resultOf(last);
         if (!result?.answer) throw new Error("回答结果为空");
         setAskAnswer(result as AskAnswer);
+        // 追问计数变了，重拉谱系
+        void loadKnowledge();
       }
     );
   }
@@ -425,10 +556,36 @@ export default function App() {
             </div>
           </div>
 
+          <div className="samples">
+            <span className="samples-label">或用示例板书试试：</span>
+            {SAMPLES.map((sample) => (
+              <button
+                key={sample.url}
+                type="button"
+                className="sample-chip"
+                disabled={busy !== null || sampleLoading !== ""}
+                onClick={() => void loadSample(sample)}
+              >
+                {sampleLoading === sample.url ? "上传中…" : sample.label}
+              </button>
+            ))}
+          </div>
+
           <h3>
             知识点卡片 <span className="count">{cards.length}</span>
             <span className="hint">识别错了？点「编辑」人工修正</span>
           </h3>
+          {sources.length > 0 && (
+            <SourceStrip
+              className="source-strip-cards"
+              title="来源原图"
+              hint="点击看大图"
+              sources={sources}
+              limit={CARD_SOURCE_LIMIT}
+              showCaption={false}
+              onOpen={setLightbox}
+            />
+          )}
           <ul className={`cards ${editingId !== null ? "cards-editing" : ""}`}>
             {cards.map((card) => (
               <li
@@ -499,7 +656,14 @@ export default function App() {
                 <span className="log-msg">{item.message || item.phase}</span>
               </div>
             ))}
-            {logs.length === 0 && <div className="log-empty">等待运行……</div>}
+            {logs.length === 0 && (
+              <div className="log-empty">
+                <p>上传一页纸后，这里会依次记录六个 Agent 的处理过程。</p>
+                <p className="log-empty-sub">
+                  命题与质检会来回两轮，直到题目答案能被验算通过。
+                </p>
+              </div>
+            )}
           </div>
         </section>
 
@@ -532,10 +696,41 @@ export default function App() {
           </div>
 
           <div className="questions">
-            {questions.map((question) => {
+            {questions.length > 0 && (
+              <div className="verify-summary">
+                <span className="vs-item">{questions.length} 题</span>
+                <span className="vs-sep">·</span>
+                <span className="vs-item vs-ok">
+                  {questions.every((question) => question.verified)
+                    ? "全部通过符号验算"
+                    : `${questions.filter((question) => question.verified).length} 题通过验算`}
+                </span>
+                {verifyRejects > 0 && (
+                  <>
+                    <span className="vs-sep">·</span>
+                    <span className="vs-item vs-warn">
+                      驳回 {verifyRejects} 轮后重生成
+                    </span>
+                  </>
+                )}
+                <span className="vs-note">
+                  验算由 sympy 代入完成，未通过的题不会出现在这里
+                </span>
+              </div>
+            )}
+            {questions.map((question, index) => {
               const result = results[question.id];
               return (
-                <article key={question.id} className="question">
+                <article
+                  key={question.id}
+                  className="question"
+                  style={{
+                    animationDelay: `${Math.min(
+                      index * QUESTION_STAGGER_MS,
+                      QUESTION_STAGGER_MAX_MS
+                    )}ms`,
+                  }}
+                >
                   <div className="q-tags">
                     <span className="tag">{question.difficulty}</span>
                     <span
@@ -640,6 +835,25 @@ export default function App() {
           ) : (
             <div className="empty">答错一道题，这里会出现可拖动的讲解图</div>
           )}
+
+          <div className="plot-sandbox">
+            <div className="plot-head">
+              <span className="plot-label">函数图像</span>
+              <input
+                className="text-input plot-input"
+                value={plotExpression}
+                spellCheck={false}
+                onChange={(event) => setPlotExpression(event.target.value)}
+                placeholder="例如 sin(x)/x 或 x^2-4x+3"
+                aria-label="函数表达式"
+              />
+            </div>
+            <FunctionPlot expression={plotExpression} />
+            <p className="plot-hint">
+              支持 <code>+ - * / ^</code>、<code>sin cos tan sqrt abs ln log exp</code>、常量{" "}
+              <code>pi</code> <code>e</code>，可省略乘号（<code>2x</code>）。
+            </p>
+          </div>
         </section>
 
         <section className="panel panel-ask">
@@ -680,6 +894,58 @@ export default function App() {
             </div>
           )}
         </section>
+
+        <section className="panel panel-graph">
+          <div className="panel-head">
+            <h2>6 · 知识谱系</h2>
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={graphLoading}
+              onClick={() => void loadKnowledge()}
+            >
+              {graphLoading ? "刷新中…" : "刷新"}
+            </button>
+          </div>
+          <div className="graph-layout">
+            <KnowledgeGraph graph={graph} loading={graphLoading} error={graphError} />
+            <aside className="graph-side">
+              <h3>
+                最常被问 Top {TOP_ASKED}
+                <span className="hint">来自 /api/stats</span>
+              </h3>
+              {stats && stats.top_asked.length > 0 ? (
+                <ol className="top-asked">
+                  {stats.top_asked.slice(0, TOP_ASKED).map((item, index) => (
+                    <li key={item.id}>
+                      <span className="rank">{index + 1}</span>
+                      <span className="top-title" title={item.title}>
+                        {item.title}
+                      </span>
+                      <span className="top-counts">
+                        问 {item.ask_count} · 题 {item.question_count}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="empty">还没有提问记录，去第 5 栏追问一次。</div>
+              )}
+            </aside>
+          </div>
+
+          <div className="source-gallery">
+            <SourceStrip
+              title="知识库图册"
+              hint={`最近 ${GALLERY_SOURCE_LIMIT} 张 · 左右滚动 · 点击看大图`}
+              sources={sources}
+              limit={GALLERY_SOURCE_LIMIT}
+              emptyText="还没有归档的图片"
+              error={sourcesError}
+              onOpen={setLightbox}
+            />
+          </div>
+        </section>
       </main>
 
       {cameraOpen && (
@@ -690,6 +956,10 @@ export default function App() {
             void ingest(file);
           }}
         />
+      )}
+
+      {lightbox && (
+        <SourceLightbox source={lightbox} onClose={() => setLightbox(null)} />
       )}
     </div>
   );
