@@ -42,6 +42,64 @@ export interface Question {
   verify_log: string;
 }
 
+/** AI 批改的逐点判定：hit = true 表示用户答到了这个要点 */
+export interface ReviewPoint {
+  hit: boolean;
+  text: string;
+}
+
+/** 分步判定：index 从 1 开始，found = 这一步在作答里做到 */
+export interface ReviewStep {
+  index: number;
+  expect: string;
+  found: boolean;
+  /** 该步的补充说明（可为空） */
+  note: string;
+}
+
+/** 第一个出错的步骤：面板上整行高亮并在下方追加「第 N 步出错」 */
+export interface ReviewFirstError {
+  step: number;
+  reason: string;
+}
+
+/** 更优解法：名称 + 为什么更好 + 编号步骤 */
+export interface ReviewBetterMethod {
+  name: string;
+  why: string;
+  steps: string[];
+}
+
+/** 批改结论的整体判定 */
+export type ReviewVerdict = "correct" | "partial" | "wrong";
+
+/** 编排器最终的批改结论（orchestrator/done 的 payload.result） */
+export interface ReviewResult {
+  score: number;
+  verdict?: ReviewVerdict;
+  points: ReviewPoint[];
+  issues: string[];
+  suggestion: string;
+  /** 标准答案，LaTeX 原文 */
+  reference: string;
+  /** 分步清单（旧后端可能没有此字段，归一化后为空数组） */
+  steps: ReviewStep[];
+  first_error: ReviewFirstError | null;
+  better_method: ReviewBetterMethod | null;
+  /** 一句话结论：你的解法几步、推荐解法几步 */
+  method_comparison: string;
+}
+
+/** 单题批改面板状态：running 时只有流式文本，ok 时带结构化结论 */
+export interface ReviewFeed {
+  status: "running" | "ok" | "failed";
+  /** review/delta 的 chunk 逐条累加 */
+  text: string;
+  result?: ReviewResult;
+  /** 失败原因，面板内直接展示并可重试 */
+  error?: string;
+}
+
 export interface Explain {
   template: string;
   title: string;

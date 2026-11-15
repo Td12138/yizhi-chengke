@@ -963,6 +963,437 @@ body {
   color: var(--warn);
 }
 
+/* ---------- AI 批改 ---------- */
+.btn-review {
+  color: #0e6b5f;
+  border-color: #a9d9cf;
+  background: #e4f2ee;
+}
+
+.tag-pending {
+  background: #f1eadb;
+  color: var(--dim);
+  border: 1px dashed var(--line-strong);
+}
+
+/* 面板挂在题目卡片内：左侧色条随状态变化（运行中 / 完成 / 失败） */
+.review-panel {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-2);
+  border-radius: 10px;
+  background: #fdfaf3;
+  font-size: var(--fs-sm);
+  animation: rise-in var(--motion-base) ease-out both;
+}
+
+.review-panel-running {
+  border-left-color: var(--accent);
+}
+
+.review-panel-failed {
+  border-left-color: var(--bad);
+}
+
+.review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.review-title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.review-status {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.review-status-bad {
+  color: var(--bad);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.review-badge {
+  padding: 1px 10px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.review-badge-correct {
+  color: #0f6f45;
+  background: #eaf4e6;
+  border-color: #a9cfa0;
+}
+
+.review-badge-partial {
+  color: var(--warn);
+  background: #f8efd8;
+  border-color: #dcc38a;
+}
+
+.review-badge-wrong {
+  color: #a8332a;
+  background: #fbeeea;
+  border-color: #e2b3a8;
+}
+
+/* 流式文本：保留换行、行高固定，光标贴字尾闪 */
+.review-stream {
+  min-height: 44px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f6f0e3;
+  color: #423a2e;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.review-cursor {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--accent);
+  font-weight: 700;
+  animation: caret-blink 1s steps(1, end) infinite;
+}
+
+.review-fail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.review-error {
+  margin: 0;
+  color: var(--bad);
+}
+
+.review-partial {
+  margin: 0;
+  max-height: 120px;
+  overflow-y: auto;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+}
+
+.review-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-summary {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.review-score {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  animation: score-pop var(--motion-slow) ease-out both;
+}
+
+.score-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* 从 12 点方向开始画，和常见分数环一致 */
+  transform: rotate(-90deg);
+}
+
+.score-ring-track {
+  fill: none;
+  stroke: #e8dfcc;
+}
+
+.score-ring-fill {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--motion-slow) ease;
+}
+
+.review-score-correct .score-ring-fill {
+  stroke: var(--ok);
+}
+
+.review-score-partial .score-ring-fill {
+  stroke: #c08a1e;
+}
+
+.review-score-wrong .score-ring-fill {
+  stroke: var(--bad);
+}
+
+.score-value {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.review-score-correct .score-value {
+  color: var(--ok);
+}
+
+.review-score-partial .score-value {
+  color: var(--warn);
+}
+
+.review-score-wrong .score-value {
+  color: var(--bad);
+}
+
+.review-score-label {
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  padding-bottom: 8px;
+}
+
+.review-section h4 {
+  margin: 0 0 4px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.review-points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-point {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  line-height: 1.6;
+}
+
+.review-point-mark {
+  flex: 0 0 auto;
+  width: 14px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.review-point-hit .review-point-mark {
+  color: var(--ok);
+}
+
+.review-point-miss .review-point-mark {
+  color: var(--bad);
+}
+
+.review-point-miss {
+  color: var(--muted);
+}
+
+/* 分步清单：错误步骤整行浅红 + 左侧竖线，并在行内追加一句原因 */
+.review-steps {
+  animation: rise-in var(--motion-base) ease-out both;
+}
+
+.review-step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.review-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 6px;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  line-height: 1.6;
+}
+
+.review-step-mark {
+  flex: 0 0 auto;
+  width: 14px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.review-step-hit .review-step-mark {
+  color: var(--ok);
+}
+
+.review-step-miss .review-step-mark {
+  color: var(--bad);
+}
+
+.review-step-index {
+  flex: 0 0 auto;
+  min-width: 13px;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  padding-top: 1px;
+}
+
+/* 窄屏下长公式/长句在行内换行或自身滚动，不把面板撑宽；
+   行内滚动条隐藏（仍可滑动），避免细条压住文字 */
+.review-step-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.review-step-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.review-step-expect {
+  display: block;
+}
+
+.review-step-note {
+  display: block;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+}
+
+.review-step-error {
+  background: #fbeeea;
+  border-left-color: var(--bad);
+}
+
+.review-step-error-note {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--bad);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.review-step-complete {
+  margin: 4px 0 0;
+  color: var(--ok);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+/* 更优解法：浅色卡片，一句话结论压在顶部 */
+.review-method-wrap {
+  animation: rise-in var(--motion-base) ease-out both;
+  animation-delay: 60ms;
+}
+
+.review-method {
+  padding: 8px 10px;
+  border: 1px solid #cfe3dd;
+  border-radius: 8px;
+  background: #eef6f3;
+}
+
+.review-method-compare {
+  margin: 0 0 6px;
+  color: #0e6b5f;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.review-method-name {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.review-method-why {
+  margin: 4px 0 0;
+  color: #423a2e;
+}
+
+.review-method-steps {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  color: #24484a;
+}
+
+.review-method-steps li {
+  margin: 2px 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-method-none {
+  margin: 0;
+  color: var(--ok);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.review-issues {
+  margin: 0;
+  padding-left: 18px;
+  color: #423a2e;
+}
+
+.review-issues li {
+  margin: 2px 0;
+}
+
+.review-suggestion p {
+  margin: 0;
+  color: #24484a;
+}
+
+.review-empty {
+  margin: 0;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+}
+
+.math-block {
+  margin: 0;
+  overflow-x: auto;
+}
+
+.review-reference .math-block {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f6f0e3;
+}
+
+.math-block-plain {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: var(--fs-sm);
+}
+
 /* ---------- 讲解 ---------- */
 .explain-title {
   margin: 4px 0 10px !important;
@@ -2052,6 +2483,24 @@ body {
 .graph-edge {
   transition: stroke var(--motion-fast) ease, stroke-opacity var(--motion-fast) ease,
     stroke-width var(--motion-fast) ease;
+}
+
+/* AI 批改：流式光标闪烁 + 分数环弹出 */
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes score-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* 全局降级：系统要求减少动态效果时，动画与过渡基本关闭 */

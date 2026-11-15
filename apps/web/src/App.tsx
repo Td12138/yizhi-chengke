@@ -7,6 +7,7 @@ import FunctionPlot from "./components/FunctionPlot";
 import FunctionSlider from "./components/FunctionSlider";
 import KnowledgeGraph from "./components/KnowledgeGraph";
 import MathText from "./components/MathText";
+import ReviewPanel from "./components/ReviewPanel";
 import RunProgress from "./components/RunProgress";
 import SourceLightbox from "./components/SourceLightbox";
 import SourceStrip from "./components/SourceStrip";
@@ -27,6 +28,12 @@ import type {
   Explain,
   GraphData,
   Question,
+  ReviewBetterMethod,
+  ReviewFeed,
+  ReviewFirstError,
+  ReviewResult,
+  ReviewStep,
+  ReviewVerdict,
   SourceItem,
   StatsData,
   Status,
@@ -74,6 +81,7 @@ const ACTION_LABEL: Record<string, string> = {
   ingest: "上传识别",
   generate: "生成练习卷",
   grade: "判分讲解",
+  review: "AI 批改",
   ask: "追问检索",
 };
 
@@ -94,17 +102,131 @@ const STAGES: Record<string, Stage[]> = {
     { label: "判定对错", agents: ["orchestrator"] },
     { label: "错因讲解", agents: ["explain"] },
   ],
+  review: [
+    { label: "逐点批改", agents: ["review"] },
+    { label: "汇总建议", agents: ["orchestrator"] },
+  ],
   ask: [
     { label: "检索卡片", agents: ["retrieve"] },
     { label: "组织回答", agents: ["orchestrator"] },
   ],
 };
 
+/** 流式占位 id 的起点：done 之前题目/卡片可能还没有库 id，用负数占位（真实 id 恒为正） */
+const FIRST_TEMP_ID = 0;
+
 type LogItem = { seq: number; agent: string; phase: Status; message: string };
 type RunError = { step: string; message: string; retry: boolean };
 
 function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * 出题流里的单题：delta 的 payload.question 可能只有部分字段，
+ * 缺什么补什么，避免渲染阶段因空值崩掉。
+ */
+function normalizeStreamedQuestion(raw: any, tempId: number): Question {
+  const options = Array.isArray(raw?.options)
+    ? raw.options.map((item: unknown) => String(item))
+    : [];
+  return {
+    id: typeof raw?.id === "number" && raw.id > 0 ? raw.id : tempId,
+    stem_latex: String(raw?.stem_latex ?? ""),
+    qtype: raw?.qtype === "choice" ? "choice" : "fill",
+    options,
+    answer: String(raw?.answer ?? ""),
+    solution: String(raw?.solution ?? ""),
+    difficulty: String(raw?.difficulty ?? ""),
+    verified: Number(raw?.verified ?? 0) || 0,
+    verify_log: String(raw?.verify_log ?? ""),
+  };
+}
+
+/** 卡片流里的单卡：标签后端可能给数组，统一成逗号串（与 /api/cards 一致） */
+function normalizeStreamedCard(raw: any, tempId: number): Card {
+  const tags = Array.isArray(raw?.tags)
+    ? raw.tags.map((item: unknown) => String(item)).join(",")
+    : String(raw?.tags ?? "");
+  return {
+    id: typeof raw?.id === "number" && raw.id > 0 ? raw.id : tempId,
+    title: String(raw?.title ?? "（识别中）"),
+    summary: String(raw?.summary ?? ""),
+    subject: String(raw?.subject ?? ""),
+    tags,
+    formula: String(raw?.formula ?? ""),
+    body: String(raw?.body ?? ""),
+  };
+}
+
+/** 分步清单：字段缺 / 形状不对就丢掉那一条，index 缺失时按顺序补 */
+function readReviewSteps(raw: any): ReviewStep[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((step: any) => step && typeof step.expect === "string" && step.expect)
+    .map((step: any, position: number) => {
+      const index = Number(step.index);
+      return {
+        index: Number.isFinite(index) && index > 0 ? Math.trunc(index) : position + 1,
+        expect: step.expect,
+        found: Boolean(step.found),
+        note: typeof step.note === "string" ? step.note : "",
+      };
+    });
+}
+
+function readFirstError(raw: any): ReviewFirstError | null {
+  if (!raw || typeof raw !== "object") return null;
+  const step = Number(raw.step);
+  if (!Number.isFinite(step) || step <= 0) return null;
+  return {
+    step: Math.trunc(step),
+    reason: typeof raw.reason === "string" ? raw.reason : "",
+  };
+}
+
+function readBetterMethod(raw: any): ReviewBetterMethod | null {
+  if (!raw || typeof raw !== "object") return null;
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  const why = typeof raw.why === "string" ? raw.why : "";
+  const steps = Array.isArray(raw.steps)
+    ? raw.steps.map((item: unknown) => String(item)).filter((item) => item.trim() !== "")
+    : [];
+  // 名称与步骤都空时视为没有更优解法，避免出现空卡片
+  if (!name && steps.length === 0) return null;
+  return { name: name || "推荐解法", why, steps };
+}
+
+/** 批改结论：缺字段补空；score 不是数字视为没拿到结论（调用方据此报错重试） */
+function readReviewResult(raw: any): ReviewResult | null {
+  if (!raw || typeof raw !== "object") return null;
+  const score = Number(raw.score);
+  if (!Number.isFinite(score)) return null;
+  const verdict: ReviewVerdict | undefined =
+    raw.verdict === "correct" || raw.verdict === "partial" || raw.verdict === "wrong"
+      ? raw.verdict
+      : undefined;
+  const points = Array.isArray(raw.points)
+    ? raw.points
+        .filter((point: any) => point && typeof point.text === "string")
+        .map((point: any) => ({ hit: Boolean(point.hit), text: point.text }))
+    : [];
+  const issues = Array.isArray(raw.issues)
+    ? raw.issues.map((issue: unknown) => String(issue))
+    : [];
+  return {
+    score,
+    verdict,
+    points,
+    issues,
+    suggestion: typeof raw.suggestion === "string" ? raw.suggestion : "",
+    reference: typeof raw.reference === "string" ? raw.reference : "",
+    steps: readReviewSteps(raw.steps),
+    first_error: readFirstError(raw.first_error),
+    better_method: readBetterMethod(raw.better_method),
+    method_comparison:
+      typeof raw.method_comparison === "string" ? raw.method_comparison : "",
+  };
 }
 
 export default function App() {
@@ -115,6 +237,8 @@ export default function App() {
   const [verifyRejects, setVerifyRejects] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [results, setResults] = useState<Record<number, { correct: boolean }>>({});
+  /** 单题 AI 批改面板：key = 题目 id */
+  const [reviews, setReviews] = useState<Record<number, ReviewFeed>>({});
   const [explain, setExplain] = useState<{ qid: number; data: Explain } | null>(null);
   const [board, setBoard] = useState<Board>({});
   const [logs, setLogs] = useState<LogItem[]>([]);
@@ -151,6 +275,12 @@ export default function App() {
   const previewUrl = useRef("");
   /** 图谱请求序号：只认最后一次，避免连点刷新时旧响应覆盖新数据 */
   const graphReq = useRef(0);
+  /** 流式占位 id 计数器（递减，恒为负） */
+  const tempSeq = useRef(FIRST_TEMP_ID);
+  /** 当前占用看板 / 进度条的 run：后发起的运行接管，旧 run 的迟到事件不再改看板 */
+  const activeRun = useRef("");
+  /** 进度条归属令牌：只让最后发起的那次运行改写进度条状态 */
+  const runToken = useRef(0);
 
   /**
    * 拉取知识谱系、统计与归档原图。
@@ -190,10 +320,17 @@ export default function App() {
 
   useEffect(() => {
     getJSON<{ cards: Card[] }>("/api/cards")
-      .then((data) => setCards(data.cards))
+      // 首屏数据晚到：已有运行在跑时不要用旧库数据覆盖流式追加的卡片
+      .then((data) => {
+        if (runToken.current !== 0) return;
+        setCards(data.cards);
+      })
       .catch(() => undefined);
     getJSON<{ questions: Question[] }>("/api/questions")
-      .then((data) => setQuestions(data.questions))
+      .then((data) => {
+        if (runToken.current !== 0) return;
+        setQuestions(data.questions);
+      })
       .catch(() => undefined);
     getJSON<{ vlm_provider: string; llm_provider: string }>("/api/health")
       .then(setHealth)
@@ -224,21 +361,77 @@ export default function App() {
   }
 
   /** 统一失败出口：错误横幅写明哪一步 + 进度条标红，保留重试入口 */
-  function failRun(step: string, message: string) {
+  function failRun(step: string, message: string, token?: number) {
     setError({ step, message, retry: true });
-    setRun((prev) => (prev ? { ...prev, failed: true } : prev));
+    if (token === undefined || runToken.current === token) {
+      setRun((prev) => (prev ? { ...prev, failed: true } : prev));
+    }
+  }
+
+  /** 流式追加一道题：负数占位 id 防撞车，真 id 重复则跳过 */
+  function appendQuestion(raw: any) {
+    tempSeq.current -= 1;
+    const incoming = normalizeStreamedQuestion(raw, tempSeq.current);
+    setQuestions((prev) => {
+      if (incoming.id > 0 && prev.some((question) => question.id === incoming.id)) {
+        return prev;
+      }
+      return [...prev, incoming];
+    });
+  }
+
+  /** 流式追加一张卡片：真 id 重复则跳过 */
+  function appendCard(raw: any) {
+    tempSeq.current -= 1;
+    const incoming = normalizeStreamedCard(raw, tempSeq.current);
+    setCards((prev) => {
+      if (incoming.id > 0 && prev.some((card) => card.id === incoming.id)) {
+        return prev;
+      }
+      return [...prev, incoming];
+    });
+  }
+
+  /**
+   * 流式增量：compose 的 delta 带 payload.question、extract 的带 payload.card，
+   * 收到一条追加一条（done 时再用完整结果校正）。
+   * 旧后端 delta 里是 questions / cards 数组，这里保持原样忽略，不改变行为。
+   */
+  function applyStreamDelta(event: AgentEvent) {
+    if (event.phase !== "delta" || !event.payload) return;
+    if (event.agent === "compose" && event.payload.question) {
+      appendQuestion(event.payload.question);
+    }
+    if (event.agent === "extract" && event.payload.card) {
+      appendCard(event.payload.card);
+    }
   }
 
   function handleEvent(event: AgentEvent) {
     const message = event.message ?? "";
-    setBoard((prev) => ({
-      ...prev,
-      [event.agent]: { phase: event.phase, message },
-    }));
+    // 看板只认最后一次发起的运行，避免并行运行的旧事件覆盖当前进度
+    if (event.run_id === activeRun.current) {
+      setBoard((prev) => ({
+        ...prev,
+        [event.agent]: { phase: event.phase, message },
+      }));
+    }
+    // 命题开始（含质检驳回后的重跑）：清掉上一卷 / 上一轮草稿，新题从 delta 逐道追加
+    if (event.agent === "compose" && event.phase === "running") {
+      setQuestions([]);
+    }
+    applyStreamDelta(event);
     // 记录质检驳回轮数：展示在练习卷头部，作为「答案可验证」的可见证据
     if (event.agent === "verify" && event.phase === "rejected") {
       setVerifyRejects((prev) => prev + 1);
     }
+    // 批改的逐片文本已经在题卡里看得到，再往日志里灌一条「delta」只会刷屏
+    const isReviewChunk =
+      event.agent === "review" &&
+      event.phase === "delta" &&
+      typeof event.payload?.chunk === "string" &&
+      event.payload.chunk !== "";
+    if (isReviewChunk) return;
     seq.current += 1;
     setLogs((prev) =>
       [
@@ -251,14 +444,18 @@ export default function App() {
   /**
    * 一次运行：发起任务 → 订阅事件流 → 处理结果。
    * 出错时写明是哪一步，并保留重试入口（不静默失败）。
+   * `before` 在拿到 run_id 之后、事件流开始之前执行（如清空上一轮流式结果）。
    */
   async function execute(
     kind: string,
     start: () => Promise<{ run_id: string }>,
-    after?: (last: AgentEvent | null) => void | Promise<void>
+    after?: (last: AgentEvent | null) => void | Promise<void>,
+    before?: () => void
   ) {
     if (busy) return;
     const label = ACTION_LABEL[kind] ?? kind;
+    const token = runToken.current + 1;
+    runToken.current = token;
 
     setBusy(kind);
     setError(null);
@@ -272,7 +469,7 @@ export default function App() {
       elapsedMs: 0,
     });
     retryRef.current = () => {
-      void execute(kind, start, after);
+      void execute(kind, start, after, before);
     };
 
     try {
@@ -281,20 +478,25 @@ export default function App() {
         const started = await start();
         runId = started.run_id;
       } catch (err) {
-        failRun(`${label} · 发起任务`, describeError(err));
+        failRun(`${label} · 发起任务`, describeError(err), token);
         return;
       }
 
+      activeRun.current = runId;
+      before?.();
       const outcome = await streamRun(runId, handleEvent, {
         timeoutMs: RUN_TIMEOUT_S * 1000,
-        onTick: (elapsedMs) =>
-          setRun((prev) => (prev && prev.active ? { ...prev, elapsedMs } : prev)),
+        onTick: (elapsedMs) => {
+          if (runToken.current !== token) return;
+          setRun((prev) => (prev && prev.active ? { ...prev, elapsedMs } : prev));
+        },
       });
 
       if (outcome.reason === "timeout") {
         failRun(
           `${label} · 等待结果`,
-          `超过 ${RUN_TIMEOUT_S} 秒仍未收到结束事件，已停止等待。可重试；若反复超时请查看后端日志。`
+          `超过 ${RUN_TIMEOUT_S} 秒仍未收到结束事件，已停止等待。可重试；若反复超时请查看后端日志。`,
+          token
         );
         return;
       }
@@ -304,7 +506,8 @@ export default function App() {
           `${label} · 事件流`,
           outcome.eventCount === 0
             ? "没有收到任何事件（后端未响应或任务已结束），请重试。"
-            : `事件流提前中断：已收到 ${outcome.eventCount} 条事件但缺少结束标记，结果可能不完整，可重试。`
+            : `事件流提前中断：已收到 ${outcome.eventCount} 条事件但缺少结束标记，结果可能不完整，可重试。`,
+          token
         );
         return;
       }
@@ -315,7 +518,8 @@ export default function App() {
           : "未知环节";
         failRun(
           `${label} · ${who}阶段`,
-          outcome.last?.message || "任务以错误状态结束"
+          outcome.last?.message || "任务以错误状态结束",
+          token
         );
         return;
       }
@@ -324,12 +528,14 @@ export default function App() {
         try {
           await after(outcome.last);
         } catch (err) {
-          failRun(`${label} · 加载结果`, describeError(err));
+          failRun(`${label} · 加载结果`, describeError(err), token);
         }
       }
     } finally {
       setBusy(null);
-      setRun((prev) => (prev ? { ...prev, active: false } : prev));
+      if (runToken.current === token) {
+        setRun((prev) => (prev ? { ...prev, active: false } : prev));
+      }
     }
   }
 
@@ -398,12 +604,21 @@ export default function App() {
         if (!result?.questions?.length) {
           throw new Error("返回结果里没有题目（可能全部被质检驳回），请调整需求后重试");
         }
+        // done 带完整结果时以它为准做一次校正（去掉驳回题、补漏、去重）
         setQuestions(result.questions);
         setAnswers({});
         setResults({});
+        setReviews({});
         setExplain(null);
         // 出题计数变了，重拉谱系让节点大小 / 颜色跟着变
         void loadKnowledge();
+      },
+      () => {
+        // 作答 / 批改状态跟着新卷一起清空；题目本身在命题开始时清空（见 handleEvent）
+        setAnswers({});
+        setResults({});
+        setReviews({});
+        setExplain(null);
       }
     );
   }
@@ -432,6 +647,138 @@ export default function App() {
         }
       }
     );
+  }
+
+  /** 批改失败：只更新该题面板 + 进度条标红，不弹顶部错误横幅（重试入口在面板里） */
+  function failReview(questionId: number, message: string, token: number) {
+    setReviews((prev) => {
+      const current = prev[questionId];
+      // 已经失败过就保留第一条原因，避免被后续通用错误覆盖
+      if (!current || current.status === "failed") return prev;
+      return {
+        ...prev,
+        [questionId]: { status: "failed", text: current.text, error: message },
+      };
+    });
+    if (runToken.current === token) {
+      setRun((prev) => (prev ? { ...prev, failed: true } : prev));
+    }
+  }
+
+  /**
+   * 单题 AI 批改：POST /api/review 拿 run_id → 复用事件流。
+   * review 的 delta.chunk 逐条追加成流式文本，结论取 orchestrator/done 的 result。
+   * 与判分互不阻塞：只禁用该题的两个按钮，可同时批改不同题目。
+   */
+  async function reviewQuestion(questionId: number) {
+    if (questionId <= 0) return;
+    if (busy) return;
+    if (reviews[questionId]?.status === "running") return;
+
+    const label = ACTION_LABEL.review;
+    const token = runToken.current + 1;
+    runToken.current = token;
+
+    // 同一题重复批改：先清掉上一次的结论与文本，只留「批改中…」
+    setReviews((prev) => ({
+      ...prev,
+      [questionId]: { status: "running", text: "" },
+    }));
+    setNotice("");
+    setRun({ kind: "review", label, active: true, failed: false, elapsedMs: 0 });
+
+    try {
+      let runId: string;
+      try {
+        const started = await postJSON<{ run_id: string }>("/api/review", {
+          question_id: questionId,
+          user_answer: answers[questionId] ?? "",
+        });
+        runId = started.run_id;
+      } catch (err) {
+        failReview(questionId, `发起批改失败：${describeError(err)}`, token);
+        return;
+      }
+
+      activeRun.current = runId;
+      setBoard({});
+      const outcome = await streamRun(
+        runId,
+        (event) => {
+          handleEvent(event);
+          if (event.agent !== "review") return;
+          if (event.phase === "delta") {
+            const chunk =
+              typeof event.payload?.chunk === "string" ? event.payload.chunk : "";
+            if (!chunk) return;
+            setReviews((prev) => {
+              const current = prev[questionId];
+              if (!current || current.status !== "running") return prev;
+              return {
+                ...prev,
+                [questionId]: { ...current, text: current.text + chunk },
+              };
+            });
+          } else if (event.phase === "error") {
+            failReview(questionId, event.message || "批改 Agent 报错", token);
+          }
+        },
+        {
+          timeoutMs: RUN_TIMEOUT_S * 1000,
+          onTick: (elapsedMs) => {
+            if (runToken.current !== token) return;
+            setRun((prev) =>
+              prev && prev.active ? { ...prev, elapsedMs } : prev
+            );
+          },
+        }
+      );
+
+      if (outcome.reason === "timeout") {
+        failReview(
+          questionId,
+          `超过 ${RUN_TIMEOUT_S} 秒仍未返回批改结果，已停止等待（可重试）`,
+          token
+        );
+        return;
+      }
+      if (outcome.reason === "broken") {
+        failReview(
+          questionId,
+          outcome.eventCount === 0
+            ? "没有收到批改事件（后端未响应或任务已结束），可重试"
+            : `批改事件流中断：只收到 ${outcome.eventCount} 条事件，结果可能不完整（可重试）`,
+          token
+        );
+        return;
+      }
+      if (outcome.reason === "error") {
+        failReview(
+          questionId,
+          outcome.last?.message || "批改以错误状态结束",
+          token
+        );
+        return;
+      }
+
+      const result = readReviewResult(outcome.last?.payload?.result);
+      if (!result) {
+        failReview(questionId, "批改结束但没有返回结构化结论（缺少 result）", token);
+        return;
+      }
+      setReviews((prev) => ({
+        ...prev,
+        [questionId]: {
+          status: "ok",
+          text: prev[questionId]?.text ?? "",
+          result,
+        },
+      }));
+    } finally {
+      if (runToken.current === token) {
+        setRun((prev) => (prev ? { ...prev, active: false } : prev));
+      }
+    }
   }
 
   async function ask() {
@@ -720,6 +1067,10 @@ export default function App() {
             )}
             {questions.map((question, index) => {
               const result = results[question.id];
+              const review = reviews[question.id];
+              const reviewing = review?.status === "running";
+              // 流式追加的草稿题还没有库 id（负数占位），先锁住作答与判分
+              const ready = question.id > 0;
               return (
                 <article
                   key={question.id}
@@ -732,13 +1083,17 @@ export default function App() {
                   }}
                 >
                   <div className="q-tags">
-                    <span className="tag">{question.difficulty}</span>
-                    <span
-                      className={`tag ${question.verified ? "tag-ok" : "tag-warn"}`}
-                    >
-                      {question.verified ? "✓ 已验算" : "! 未验算"}
-                    </span>
-                    <span className="q-id">#{question.id}</span>
+                    <span className="tag">{question.difficulty || "难度待定"}</span>
+                    {ready ? (
+                      <span
+                        className={`tag ${question.verified ? "tag-ok" : "tag-warn"}`}
+                      >
+                        {question.verified ? "✓ 已验算" : "! 未验算"}
+                      </span>
+                    ) : (
+                      <span className="tag tag-pending">待验算</span>
+                    )}
+                    <span className="q-id">{ready ? `#${question.id}` : "草稿"}</span>
                     {!question.verified && question.verify_log && (
                       <span className="q-verify">{question.verify_log}</span>
                     )}
@@ -762,7 +1117,7 @@ export default function App() {
                               type="radio"
                               name={`q-${question.id}`}
                               checked={active}
-                              disabled={busy !== null}
+                              disabled={busy !== null || !ready}
                               onChange={() =>
                                 setAnswers((prev) => ({
                                   ...prev,
@@ -782,7 +1137,7 @@ export default function App() {
                       className="text-input"
                       placeholder="填写答案"
                       value={answers[question.id] ?? ""}
-                      disabled={busy !== null}
+                      disabled={busy !== null || !ready}
                       onChange={(event) =>
                         setAnswers((prev) => ({
                           ...prev,
@@ -795,10 +1150,28 @@ export default function App() {
                   <div className="q-actions">
                     <button
                       className="btn btn-sm"
-                      disabled={busy !== null || !(answers[question.id] ?? "").trim()}
+                      disabled={
+                        busy !== null ||
+                        reviewing ||
+                        !ready ||
+                        !(answers[question.id] ?? "").trim()
+                      }
                       onClick={() => void grade(question.id)}
                     >
                       {busy === "grade" ? "判分中…" : "提交判分"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-review"
+                      disabled={busy !== null || reviewing || !ready}
+                      title={
+                        ready
+                          ? "让 review Agent 逐点批改这道题"
+                          : "题目还在验算中，稍等一下"
+                      }
+                      onClick={() => void reviewQuestion(question.id)}
+                    >
+                      {reviewing ? "批改中…" : "AI 批改"}
                     </button>
                     {result && (
                       <span
@@ -808,6 +1181,13 @@ export default function App() {
                       </span>
                     )}
                   </div>
+
+                  {ready && review && (
+                    <ReviewPanel
+                      state={review}
+                      onRetry={() => void reviewQuestion(question.id)}
+                    />
+                  )}
 
                   {result && !result.correct && (
                     <div className="solution">

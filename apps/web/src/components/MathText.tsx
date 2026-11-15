@@ -31,3 +31,27 @@ export default function MathText({ text }: { text: string }) {
     </span>
   );
 }
+
+/**
+ * 整段 LaTeX（如批改给出的标准答案）按块级公式渲染。
+ * 后端可能自带 `$`/`$$` 分隔符，这里先剥掉；解析失败退化为等宽原文。
+ */
+export function MathBlock({ latex }: { latex: string }) {
+  const source = String(latex ?? "")
+    .trim()
+    .replace(/^\$+/, "")
+    .replace(/\$+$/, "")
+    .trim();
+  if (!source) return null;
+
+  let html: string;
+  try {
+    html = katex.renderToString(source, {
+      throwOnError: false,
+      displayMode: true,
+    });
+  } catch {
+    return <div className="math-block math-block-plain">{source}</div>;
+  }
+  return <div className="math-block" dangerouslySetInnerHTML={{ __html: html }} />;
+}

@@ -7,6 +7,7 @@ export const AGENTS = [
   { key: "verify", label: "质检", role: "sympy 验算" },
   { key: "explain", label: "讲解", role: "错因 → 可视化" },
   { key: "retrieve", label: "检索", role: "卡片召回" },
+  { key: "review", label: "批改", role: "作答 → 逐点诊断" },
 ] as const;
 
 type BoardEntry = { phase: Status; message: string };
