@@ -273,8 +273,24 @@ def _mock_note(note: str, source: str) -> str:
     return f"{note}；{fixtures.match_note(source)}"
 
 
+def _assert_pdf_readable(path: Path) -> None:
+    """在 mock 分支之前先确认文件真是可读 PDF，避免加密/损坏文件被伪造卡片。"""
+    try:
+        document = pymupdf.open(str(path))
+    except Exception as exc:
+        raise ValueError("PDF 无法打开：文件损坏或不是 PDF") from exc
+    try:
+        if document.needs_pass:
+            raise ValueError("PDF 已加密，请先解除密码后再上传")
+        if document.page_count <= 0:
+            raise ValueError("PDF 没有可读页面")
+    finally:
+        document.close()
+
+
 async def _pdf_document(path: Path, source: str) -> tuple[list[dict], str]:
     """PDF：文本层可用就直读，否则渲染前 N 页交给视觉模型。"""
+    _assert_pdf_readable(path)
     pages = extract_pdf_text(path)
     if is_text_usable(pages):
         blocks = truncate_blocks(text_blocks("\n\n".join(pages)))

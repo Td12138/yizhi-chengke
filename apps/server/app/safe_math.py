@@ -26,7 +26,15 @@ MAX_EXPR_CHARS = 300
 # 幂指数上限：`9**9**9` 这类指数塔会在求值时把内存/CPU 吃光，先看结构再拒绝
 MAX_POW_EXPONENT = 1000
 # 幂节点数上限：短表达式也能堆出几十层嵌套幂，超过即视为构造攻击
-MAX_POW_NODES = 20
+# 只限制「幂叠幂」；普通多项式可能有几十项 x**n，给到 50 避免误伤
+MAX_POW_NODES = 50
+
+# 允许的常量名 → sympy 值（pi/e 是三角/指数题最自然的写法）
+# 注意：不把 e 当常量，e 在代数题里常作变量；只放行 pi / PI。
+ALLOWED_CONSTANTS: dict[str, Any] = {
+    "pi": sp.pi,
+    "PI": sp.pi,
+}
 
 # 允许的函数名 → sympy 实现（白名单外的标识符一律拒绝）
 ALLOWED_FUNCTIONS: dict[str, Any] = {
@@ -59,15 +67,23 @@ class UnsafeInput(ValueError):
 
 
 def _check_powers(expr: sp.Expr) -> None:
-    """拒绝指数爆炸：指数必须是有限数且绝对值不超过 MAX_POW_EXPONENT。
+    """拒绝指数爆炸：指数必须是有限数、不叠幂，且绝对值不超过上限。
 
     必须在 `evaluate=False` 下检查——`9**9**9` 一旦进入求值阶段就会先算
     9**9 再算 9**(9**9)，内存直接被打满，连异常都来不及抛。
+    `((2**1000)**1000)**1000` 每一层指数都合法，但复合后是 2^10^9，必须在
+    结构上直接拒绝「base 本身还是 Pow」的叠幂。
     """
+    if not isinstance(expr, sp.Expr):
+        raise UnsafeInput("表达式不是数学式")
     powers = expr.atoms(sp.Pow)
     if len(powers) > MAX_POW_NODES:
-        raise UnsafeInput(f"幂运算嵌套过多（{len(powers)} 个）")
+        raise UnsafeInput(f"幂运算过多（{len(powers)} 个）")
     for power in powers:
+        # 只拒绝「底数本身直接是一个 Pow」的指数塔；sqrt((-5)**2 - 24) 的
+        # base 是 Add，不应误伤。
+        if isinstance(power.base, sp.Pow):
+            raise UnsafeInput("不允许幂叠幂（指数塔）")
         try:
             exponent = float(power.exp)
         except (TypeError, ValueError) as exc:
@@ -89,15 +105,16 @@ def parse_expression(text: str) -> sp.Expr:
         raise UnsafeInput("表达式过长")
     if not ALLOWED_CHARS.match(raw):
         raise UnsafeInput("表达式含非法字符")
+    allowed_names = {**ALLOWED_FUNCTIONS, **ALLOWED_CONSTANTS}
     for name in NAME_RUNS.findall(raw):
-        if len(name) > 1 and name not in ALLOWED_FUNCTIONS:
+        if len(name) > 1 and name not in allowed_names:
             raise UnsafeInput(f"表达式含未知标识符：{name}")
     # ^ 是数学写法，Python/sympy 里是异或；白名单只放行了 ^，这里显式换掉
     code = raw.replace("^", "**")
     expr = sp.parse_expr(
         code,
         global_dict=dict(GLOBAL_DICT),
-        local_dict=dict(ALLOWED_FUNCTIONS),
+        local_dict=allowed_names,
         # 先只建语法树不求值：指数爆炸要在结构层面拦，不能交给 sympy 算
         evaluate=False,
     )

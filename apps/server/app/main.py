@@ -23,6 +23,8 @@ from .orchestrator import Orchestrator, new_run_id
 UPLOAD_CHUNK_BYTES = 1024 * 1024
 # 各字段上限：只拦明显异常的输入，正常文案远小于这些数
 ASK_QUERY_MAX_CHARS = 2000
+ANSWER_MAX_CHARS = 5000
+REQUIREMENT_MAX_CHARS = 500
 CARD_TITLE_MAX_CHARS = 120
 CARD_SUMMARY_MAX_CHARS = 500
 CARD_FORMULA_MAX_CHARS = 2000
@@ -71,20 +73,22 @@ class GenerateRequest(BaseModel):
     card_ids: list[int] = Field(
         default_factory=list, max_length=config.MAX_GENERATE_CARD_IDS
     )
-    requirement: str = "出几道基础题"
+    requirement: str = Field(
+        default="出几道基础题", max_length=REQUIREMENT_MAX_CHARS
+    )
     count: int = Field(default=config.DEFAULT_QUESTION_COUNT)
 
 
 class GradeRequest(BaseModel):
     question_id: int
-    user_answer: str
+    user_answer: str = Field(max_length=ANSWER_MAX_CHARS)
 
 
 class ReviewRequest(BaseModel):
     """AI 批改请求：题号 + 学生作答原文。"""
 
     question_id: int
-    user_answer: str
+    user_answer: str = Field(max_length=ANSWER_MAX_CHARS)
 
 
 class AskRequest(BaseModel):

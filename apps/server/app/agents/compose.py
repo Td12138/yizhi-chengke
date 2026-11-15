@@ -29,9 +29,13 @@ class ComposeAgent(Agent):
                 "cards": cards,
             },
         )
-        questions = (result.get("questions") or [])[:count]
+        raw_questions = result.get("questions")
+        if not isinstance(raw_questions, list):
+            raw_questions = []
+        # 模型偶尔把题目写成字符串/列表套列表：过滤坏条目，别让一个坏元素炸整批
+        questions = [q for q in raw_questions if isinstance(q, dict)][:count]
 
-        card_ids = [c["id"] for c in cards if "id" in c]
+        card_ids = [c["id"] for c in cards if isinstance(c, dict) and "id" in c]
         for question in questions:
             question.setdefault("card_ids", card_ids)
 

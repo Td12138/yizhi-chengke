@@ -202,7 +202,9 @@ class Orchestrator:
                     )
 
             questions = ctx.state.get("questions", [])
-            delivered = [q for q in questions if q.get("verified")]
+            delivered = [
+                q for q in questions if isinstance(q, dict) and q.get("verified")
+            ]
             dropped = len(questions) - len(delivered)
             if not delivered:
                 raise RuntimeError("全部题目未通过质检，拒绝交付未验证内容")

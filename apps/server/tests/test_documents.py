@@ -351,3 +351,37 @@ def test_corrupted_pdf_maps_to_readable_error(tmp_path, monkeypatch):
         asyncio.run(documents.read_blocks(path))
 
     assert "PDF" in str(info.value)
+
+def _write_encrypted_pdf(path):
+    document = pymupdf.open()
+    document.new_page()
+    document.save(
+        str(path),
+        encryption=pymupdf.PDF_ENCRYPT_AES_256,
+        owner_pw="owner",
+        user_pw="user",
+    )
+    document.close()
+
+
+def test_encrypted_pdf_is_rejected_even_in_mock(tmp_path, monkeypatch):
+    """默认 mock 下也不能把加密 PDF 静默换成样例卡片。"""
+    monkeypatch.setattr(config, "VLM_PROVIDER", "mock")
+    path = tmp_path / "locked-mock.pdf"
+    _write_encrypted_pdf(path)
+
+    with pytest.raises(ValueError) as info:
+        asyncio.run(documents.read_blocks(path))
+
+    assert "加密" in str(info.value)
+
+
+def test_zero_byte_pdf_is_rejected_even_in_mock(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "VLM_PROVIDER", "mock")
+    path = tmp_path / "empty.pdf"
+    path.write_bytes(b"")
+
+    with pytest.raises(ValueError) as info:
+        asyncio.run(documents.read_blocks(path))
+
+    assert "PDF" in str(info.value)

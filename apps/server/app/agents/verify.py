@@ -23,13 +23,12 @@ TOLERANCE = 1e-6
 def check_question(question: dict) -> tuple[bool, str]:
     """有 verify 就验算，没有就标记「无可验算表达式」（不阻塞）。"""
     verify = question.get("verify")
-    if verify is None:
-        return True, "无可验算表达式，仅做结构检查"
-    if not isinstance(verify, dict):
-        # 模型有时把 verify 写成字符串 / 数组 / 数字：这是坏题，不能静默放行
-        return False, "verify 不是对象"
+    # None / "" / [] / {} / 0 都是「没有可验算表达式」，统一走结构检查；
+    # 只有非空且不是对象（如 "x**2"、[1,2]、42）才是坏题。
     if not verify:
         return True, "无可验算表达式，仅做结构检查"
+    if not isinstance(verify, dict):
+        return False, "verify 不是对象"
 
     expr_text = str(verify.get("expr", "")).strip()
     raw_subs = verify.get("subs") or {}
@@ -67,12 +66,15 @@ class VerifyAgent(Agent):
 
         results: list[bool] = []
         for question in questions:
-            item = question if isinstance(question, dict) else {}
-            try:
-                passed, detail = check_question(item)
-            except Exception as exc:  # 单题坏掉只记驳回，不拖垮整批
-                passed, detail = False, f"验算异常：{type(exc).__name__}: {exc}"
-            if isinstance(question, dict):
+            if not isinstance(question, dict):
+                item = {}
+                passed, detail = False, "题目不是对象"
+            else:
+                item = question
+                try:
+                    passed, detail = check_question(item)
+                except Exception as exc:  # 单题坏掉只记驳回，不拖垮整批
+                    passed, detail = False, f"验算异常：{type(exc).__name__}: {exc}"
                 question["verified"] = passed
                 question["verify_log"] = detail
             results.append(passed)

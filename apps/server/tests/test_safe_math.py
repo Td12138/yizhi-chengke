@@ -162,3 +162,13 @@ def test_small_power_still_parses_and_evaluates():
 def test_symbolic_exponent_is_rejected():
     with pytest.raises(safe_math.UnsafeInput):
         safe_math.parse_expression("2**x")
+
+def test_nested_power_tower_is_rejected_before_evaluation():
+    """每一层指数都 <=1000，但复合后是 2^10^9；必须在结构层拒绝。"""
+    for expr in ("((2**1000)**1000)**1000", "((x**2)**3)**4", "(9**9)**(9**9)"):
+        with pytest.raises(safe_math.UnsafeInput):
+            safe_math.parse_expression(expr)
+
+
+def test_pi_constant_is_allowed():
+    assert float(safe_math.sp.N(safe_math.parse_expression("sin(pi/6)"))) == pytest.approx(0.5)

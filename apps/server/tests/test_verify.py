@@ -59,12 +59,20 @@ def test_tolerance_absorbs_float_noise():
     assert passed is True
 
 
-@pytest.mark.parametrize("verify", ["1+1", [1, 2], 5, 1.5, "", []])
+@pytest.mark.parametrize("verify", ["1+1", [1, 2], 5, 1.5])
 def test_non_object_verify_is_rejected(verify):
     passed, detail = check_question({"verify": verify})
 
     assert passed is False
     assert detail == "verify 不是对象"
+
+
+@pytest.mark.parametrize("verify", ["", [], 0, False, {}])
+def test_empty_verify_is_not_blocking(verify):
+    passed, detail = check_question({"verify": verify})
+
+    assert passed is True
+    assert "无可验算表达式" in detail
 
 
 def test_huge_expect_is_rejected_without_overflow():

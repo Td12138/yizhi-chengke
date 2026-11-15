@@ -10,8 +10,13 @@ from typing import Any, AsyncIterator
 
 # 单次运行保留的事件上限，防止长时间运行占内存
 MAX_EVENTS_PER_RUN = 500
-# 终止事件：达到上限时也不能丢，否则前端永远等不到 done/error/rejected
-TERMINAL_PHASES = {"done", "error", "rejected"}
+# 终止事件：达到上限时也不能丢，否则前端永远等不到 done/error。
+# 注意：每个子 Agent 也会发 done，不能把所有 done 都当终止事件，否则上限形同虚设。
+TERMINAL_EVENTS = {
+    ("orchestrator", "done"),
+    ("orchestrator", "error"),
+    ("verify", "rejected"),
+}
 # 保留的运行数上限：超过就回收已结束的 run（SSE 若仍在读，对象仍在内存里，不受影响）
 MAX_RUNS = 50
 # SSE 保活间隔（秒），避免中间层断流
@@ -51,7 +56,10 @@ class Run:
         self.error: str | None = None
 
     def append(self, event: Event) -> None:
-        if len(self.history) < MAX_EVENTS_PER_RUN or event.phase in TERMINAL_PHASES:
+        if (
+            len(self.history) < MAX_EVENTS_PER_RUN
+            or (event.agent, event.phase) in TERMINAL_EVENTS
+        ):
             # 终止事件允许越过上限：若丢弃 / 顶掉旧事件，正在读流的 SSE 客户端
             # 会因下标错位永远收不到 done/error，前端就卡在最后一步
             self.history.append(event)
