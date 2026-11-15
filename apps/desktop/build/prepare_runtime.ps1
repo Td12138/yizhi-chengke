@@ -245,6 +245,13 @@ function Invoke-Prune {
         Write-Step "按 -SkipPrune 保留测试目录"
     }
 
+    # pip 生成的 bin/*.exe 启动器内嵌构建机 Python 绝对路径；应用不需要这些命令，删掉
+    $binDir = Join-Path $SitePackagesDir "bin"
+    if (Test-Path -LiteralPath $binDir) {
+        Remove-Item -LiteralPath $binDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Step "剔除 pip 启动器目录 site-packages/bin"
+    }
+
     if ($PruneBytecode) {
         $pyc = Get-ChildItem -LiteralPath $SitePackagesDir -Recurse -File -Filter "*.pyc" -ErrorAction SilentlyContinue
         $pycCount = @($pyc).Count
