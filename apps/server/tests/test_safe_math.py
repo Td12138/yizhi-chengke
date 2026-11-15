@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from app import safe_math
@@ -137,3 +139,26 @@ def test_safe_math_rejects_empty_and_overlong():
         safe_math.parse_expression("")
     with pytest.raises(safe_math.UnsafeInput):
         safe_math.parse_expression("1 + " * (safe_math.MAX_EXPR_CHARS))
+
+
+@pytest.mark.parametrize("expr", ["9**9**9", "9**9**8", "2**1001"])
+def test_power_tower_is_rejected_before_evaluation(expr):
+    """指数塔必须在求值前拦下：一旦交给 sympy 算就是内存/CPU DoS。"""
+    started = time.perf_counter()
+
+    with pytest.raises(safe_math.UnsafeInput):
+        safe_math.parse_expression(expr)
+
+    assert time.perf_counter() - started < 1.0
+
+
+def test_small_power_still_parses_and_evaluates():
+    assert float(safe_math.parse_expression("9**2")) == 81.0
+    assert float(safe_math.parse_expression("(-5)**2")) == 25.0
+    assert float(safe_math.parse_expression("sqrt(1)")) == 1.0
+    assert float(safe_math.parse_expression("x**2").subs({safe_math.sp.Symbol("x"): 3})) == 9.0
+
+
+def test_symbolic_exponent_is_rejected():
+    with pytest.raises(safe_math.UnsafeInput):
+        safe_math.parse_expression("2**x")

@@ -304,6 +304,9 @@ class ReviewAgent(Agent):
                 f"流式不可用（{type(exc).__name__}: {exc}），已回退一次性批改",
                 notice="stream-fallback",
             )
+            # 中断前吐出的半句已经发给前端了，但最终文本必须只算回退后的完整评语，
+            # 否则 result["text"] 会变成「半句 + 完整评语」的拼接怪
+            self.streamed = ""
             raw = await llm.chat_json("review", payload)
             review = coerce_review(raw, question, base=local)
             await self._emit_all(render_review_text(review), config.CHUNK_PACE_SECONDS)

@@ -8,12 +8,12 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db
+from app import config, db
 from app.agents.review import render_review_text, split_chunks
 from app.events import EventBus
 from app.main import app
 from app.orchestrator import Orchestrator
-from app.providers import fixtures
+from app.providers import fixtures, llm
 
 RUN_ID = "test-review"
 MISSING_ID = 99999
@@ -462,3 +462,30 @@ def test_chunks_cover_whole_text_without_loss_or_overlap():
         cursor += len(chunk)
     assert starts == sorted(starts)
     assert cursor == len(text)
+
+
+def test_midstream_failure_discards_partial_text(monkeypatch):
+    """流式中途断掉：回退评语不能把中断前的半句拼进最终文本。"""
+    monkeypatch.setattr(config, "LLM_PROVIDER", "openai")
+    stale = "中断前已经发出的半句绝不能混进最终文本里"
+
+    async def broken_stream(*_args, **_kwargs):
+        yield stale
+        raise RuntimeError("stream broken")
+
+    async def fake_json(*_args, **_kwargs):
+        return {
+            "score": 40,
+            "verdict": "partial",
+            "issues": ["结果不对"],
+            "suggestion": "把数字代进去",
+        }
+
+    monkeypatch.setattr(llm, "chat_stream", broken_stream)
+    monkeypatch.setattr(llm, "chat_json", fake_json)
+
+    result = _result(_review_events(AXIS_Q, "3"))
+
+    assert "中断前已经发出的半句" not in result["text"]
+    assert result["text"] == render_review_text(result)
+    assert result["score"] == 40

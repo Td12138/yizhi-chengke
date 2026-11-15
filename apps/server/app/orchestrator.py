@@ -176,14 +176,17 @@ class Orchestrator:
         self, run_id: str, card_ids: list[int], requirement: str, count: int
     ) -> None:
         """一句话需求 → 命题 ↔ 质检回环 → 交付。"""
-        cards = db.get_cards(card_ids) if card_ids else db.list_cards(limit=3)
         ctx = RunContext(
             run_id,
             self.bus,
-            {"cards": cards, "requirement": requirement, "count": count},
+            {"requirement": requirement, "count": count},
         )
         max_rounds = config.VERIFY_MAX_RETRY + 1
         try:
+            # 取卡片也要在 try 里：查库失败同样要把 run 关掉，否则 SSE 永远等下去
+            capped_ids = list(card_ids or [])[: config.MAX_GENERATE_CARD_IDS]
+            cards = db.get_cards(capped_ids) if capped_ids else db.list_cards(limit=3)
+            ctx.state["cards"] = cards
             for round_no in range(1, max_rounds + 1):
                 ctx.state["round"] = round_no
                 await self._step(ctx, ComposeAgent)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from app import storage
@@ -98,6 +99,34 @@ def test_rename_after_ocr_keeps_uuid_name_without_title(tmp_path):
 def test_rename_after_ocr_keeps_missing_file_untouched(tmp_path):
     missing = tmp_path / "gone.png"
     assert storage.rename_after_ocr(missing, CHINESE_TITLE, when=FIXED_TS) == missing
+
+
+def test_concurrent_rename_keeps_every_file(tmp_path):
+    """12 个线程同标题归档：O_EXCL 占位保证文件名不撞车、内容不互相覆盖。"""
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir()
+    images: list[Path] = []
+    for index in range(12):
+        path = archive_dir / f"uuid-{index}.png"
+        path.write_bytes(f"content-{index}".encode())
+        images.append(path)
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        archived = list(
+            pool.map(
+                lambda path: storage.rename_after_ocr(
+                    path, CHINESE_TITLE, when=FIXED_TS
+                ),
+                images,
+            )
+        )
+
+    assert len({path.name for path in archived}) == 12
+    files = [path for path in archive_dir.iterdir() if path.is_file()]
+    assert len(files) == 12
+    assert {path.read_bytes() for path in files} == {
+        f"content-{index}".encode() for index in range(12)
+    }
 
 
 def test_pick_title_prefers_title_block():

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from pathlib import Path
@@ -20,6 +21,8 @@ DASH_RUN = re.compile(r"-{2,}")
 MAX_NAME_CHARS = 40
 # 重名时追加的序号起点
 FIRST_SUFFIX = 2
+# 连续撞名最多尝试多少次：正常目录远到不了，防止异常目录把线程卡死
+MAX_NAME_ATTEMPTS = 1000
 # 日期前缀格式
 DATE_FORMAT = "%Y-%m-%d"
 
@@ -62,6 +65,31 @@ def dated_stem(title: str, when: float | None = None) -> str:
     return f"{stamp}-{slug}"
 
 
+def _reserve_target(path: Path) -> Path:
+    """原子抢占目标名：O_CREAT|O_EXCL 建空占位文件，撞名就试 -2、-3 …
+
+    先 `exists()` 再改名是 TOCTOU：两个线程同时看到「不存在」，会互相覆盖。
+    这里让内核保证只有一个线程能创建同名文件，其余线程直接顺延。
+    """
+    index = 0
+    while index < MAX_NAME_ATTEMPTS:
+        candidate = (
+            path
+            if index == 0
+            else path.with_name(
+                f"{path.stem}-{FIRST_SUFFIX + index - 1}{path.suffix}"
+            )
+        )
+        try:
+            handle = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            index += 1
+            continue
+        os.close(handle)
+        return candidate
+    raise OSError(f"重名文件过多，无法为 {path.name} 找到可用文件名")
+
+
 def rename_after_ocr(image_path: Path, title: str, when: float | None = None) -> Path:
     """把上传图按标题重命名到同目录，返回实际路径（标题为空时返回原路径）。
 
@@ -71,10 +99,16 @@ def rename_after_ocr(image_path: Path, title: str, when: float | None = None) ->
     stem = dated_stem(title, when)
     if not stem or not image_path.is_file():
         return image_path
-    target = unique_path(image_path.with_name(f"{stem}{image_path.suffix}"))
+    target = image_path.with_name(f"{stem}{image_path.suffix}")
     if target == image_path:
         return image_path
-    image_path.replace(target)
+    target = _reserve_target(target)
+    try:
+        image_path.replace(target)
+    except OSError:
+        # 占位文件是我们刚建的：改名失败就撤掉，免得留下 0 字节假归档
+        target.unlink(missing_ok=True)
+        raise
     return target
 
 

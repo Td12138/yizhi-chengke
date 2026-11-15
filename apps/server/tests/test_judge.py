@@ -21,6 +21,18 @@ def test_normalize_maps_fullwidth_punctuation():
     assert normalize("1，2") == "1,2"
 
 
+def test_normalize_handles_fullwidth_letters_and_minus_sign():
+    # NFKC：全角字母、全角数字、U+2212 减号都归一到 ASCII
+    assert normalize("ＡＢＣ１２３") == "abc123"
+    assert normalize("−1") == "-1"
+    assert normalize("Ｘ＝２") == "x=2"
+
+
+def test_fill_accepts_fullwidth_letters_and_unicode_minus():
+    assert judge({"qtype": "fill", "answer": "$-1$"}, "−1") is True
+    assert judge({"qtype": "fill", "answer": "x"}, "Ｘ") is True
+
+
 def test_fill_exact_match():
     question = {"qtype": "fill", "answer": "4"}
     assert judge(question, "4") is True

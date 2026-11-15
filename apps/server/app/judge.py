@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 # 中文输入法常见的全角标点/符号，判分前统一成半角（逗号要保留，不能直接删）
 FULLWIDTH_TABLE = str.maketrans(
@@ -22,6 +23,7 @@ FULLWIDTH_TABLE = str.maketrans(
         "【": "[",
         "】": "]",
         "－": "-",
+        "−": "-",
         "＋": "+",
         "＝": "=",
         "．": ".",
@@ -41,8 +43,8 @@ NOISE_PATTERN = re.compile(r"[\s$\\({})\\\\]")
 
 
 def normalize(text: str) -> str:
-    """判分归一化：全角转半角，去掉空白、$、括号、反斜杠并统一小写。"""
-    text = str(text).translate(FULLWIDTH_TABLE)
+    """判分归一化：NFKC 全角转半角（含 −），去掉空白、$、括号、反斜杠并统一小写。"""
+    text = unicodedata.normalize("NFKC", str(text)).translate(FULLWIDTH_TABLE)
     return NOISE_PATTERN.sub("", text).lower()
 
 

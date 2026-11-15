@@ -98,3 +98,44 @@ def test_document_gets_larger_limit_than_image(client, monkeypatch):
 
     assert image_response.status_code == 413
     assert document_response.status_code == 200
+
+
+def test_oversized_upload_leaves_no_partial_file(client, monkeypatch):
+    monkeypatch.setattr(config, "MAX_UPLOAD_BYTES", 16)
+
+    response = client.post(
+        "/api/ingest",
+        files={"file": ("board.png", b"x" * 64, "image/png")},
+    )
+
+    assert response.status_code == 413
+    leftovers = (
+        list(config.UPLOAD_DIR.iterdir()) if config.UPLOAD_DIR.exists() else []
+    )
+    assert leftovers == [], "超限中断后必须删掉半成品文件"
+
+
+def test_upload_reads_in_bounded_chunks(client, monkeypatch):
+    """分块读取：块大小 8、上限 16 时，第三块就必须触发拒绝并停止。"""
+    from starlette.datastructures import UploadFile
+
+    import app.main as main_module
+
+    monkeypatch.setattr(config, "MAX_UPLOAD_BYTES", 16)
+    monkeypatch.setattr(main_module, "UPLOAD_CHUNK_BYTES", 8)
+
+    sizes: list[int] = []
+    original_read = UploadFile.read
+
+    async def recording_read(self, size: int = -1):
+        sizes.append(size)
+        return await original_read(self, size)
+
+    monkeypatch.setattr(UploadFile, "read", recording_read)
+
+    response = client.post(
+        "/api/ingest", files={"file": ("board.png", b"x" * 64, "image/png")}
+    )
+
+    assert response.status_code == 413
+    assert sizes == [8, 8, 8], "必须按固定块大小读，不能一次把整包读进内存"

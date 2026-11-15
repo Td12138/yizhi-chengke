@@ -116,3 +116,13 @@ def test_stats_limited_to_ten_rows():
     assert [row["ask_count"] for row in top] == sorted(
         (row["ask_count"] for row in top), reverse=True
     )
+
+
+def test_stats_skips_cards_never_asked():
+    asked, never = _seed([_card("被问过", []), _card("没人问", [])])
+    db.bump_ask([asked])
+
+    top = _client().get("/api/stats").json()["top_asked"]
+
+    assert [row["id"] for row in top] == [asked]
+    assert all(row["ask_count"] > 0 for row in top)

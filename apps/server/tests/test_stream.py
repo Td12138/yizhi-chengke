@@ -12,7 +12,7 @@ import json
 import httpx
 import pytest
 
-from app import config, db
+from app import config, db, events
 from app.events import EventBus
 from app.orchestrator import Orchestrator
 from app.providers import fixtures, llm
@@ -394,3 +394,28 @@ def test_extract_emits_one_delta_per_card():
     assert [e.payload["index"] for e in deltas] == list(
         range(1, len(fixtures.MOCK_CARDS) + 1)
     )
+
+
+# ---- 事件上限：终止事件必须保留 ----
+
+def test_terminal_event_survives_history_cap():
+    run = events.Run("cap")
+    for index in range(events.MAX_EVENTS_PER_RUN):
+        run.append(events.Event("cap", "agent", "delta", f"第 {index} 条"))
+
+    run.append(events.Event("cap", "orchestrator", "done", "交付完成"))
+
+    assert len(run.history) == events.MAX_EVENTS_PER_RUN + 1
+    assert run.history[-1].phase == "done"
+    assert run.history[-1].message == "交付完成"
+
+
+def test_non_terminal_event_is_dropped_at_cap():
+    run = events.Run("cap")
+    for index in range(events.MAX_EVENTS_PER_RUN):
+        run.append(events.Event("cap", "agent", "delta", f"第 {index} 条"))
+
+    run.append(events.Event("cap", "agent", "delta", "多出来的一条"))
+
+    assert len(run.history) == events.MAX_EVENTS_PER_RUN
+    assert run.history[-1].message != "多出来的一条"

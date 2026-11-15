@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 import pymupdf
+import pytest
 from docx import Document
 
 from app import config, db, documents
@@ -136,6 +137,35 @@ def test_short_pages_are_rejected():
 def test_empty_text_layer_is_rejected():
     assert documents.is_text_usable([]) is False
     assert documents.is_text_usable([""]) is False
+
+
+def test_few_blank_pages_do_not_sink_a_long_document():
+    """60 页里最后 1 页是空白：可用页占 59/60，超过 80% 就应当直读。"""
+    assert documents.is_text_usable([GOOD_PAGE] * 59 + [""]) is True
+
+
+def test_majority_blank_pages_are_rejected():
+    assert documents.is_text_usable([GOOD_PAGE] * 2 + [""] * 8) is False
+
+
+def test_pdf_text_extraction_is_capped_at_max_pages(monkeypatch):
+    class FakePage:
+        def __init__(self) -> None:
+            self.reads = 0
+
+        def extract_text(self) -> str:
+            self.reads += 1
+            return "正文"
+
+    pages = [FakePage() for _ in range(documents.MAX_PDF_TEXT_PAGES + 50)]
+    monkeypatch.setattr(
+        documents, "PdfReader", lambda _path: type("R", (), {"pages": pages})()
+    )
+
+    text = documents.extract_pdf_text(Path("any.pdf"))
+
+    assert len(text) == documents.MAX_PDF_TEXT_PAGES
+    assert sum(page.reads for page in pages) == documents.MAX_PDF_TEXT_PAGES
 
 
 # ---- PDF 双路径 ----
@@ -269,3 +299,55 @@ def test_ingest_txt_reports_text_path_and_keeps_extension():
     assert len(files) == 1
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}-二次函数的图象与性质\.txt", files[0])
     assert db.list_sources()[0]["display_name"] == files[0]
+
+
+# ---- 解压炸弹与损坏文件 ----
+
+def test_docx_uncompressed_size_is_capped(tmp_path, monkeypatch):
+    monkeypatch.setattr(documents, "MAX_DOCX_UNCOMPRESSED_BYTES", 16)
+    path = tmp_path / "讲义.docx"
+    _make_docx(path)
+
+    with pytest.raises(ValueError) as info:
+        asyncio.run(documents.read_blocks(path))
+
+    assert "DOCX 解压后超过 50 MB，已拒绝" in str(info.value)
+
+
+def test_corrupted_docx_maps_to_readable_error(tmp_path):
+    path = tmp_path / "broken.docx"
+    path.write_bytes(b"not a zip file")
+
+    with pytest.raises(ValueError) as info:
+        asyncio.run(documents.read_blocks(path))
+
+    assert "DOCX 无法解析" in str(info.value)
+
+
+def test_encrypted_pdf_render_raises_readable_error(tmp_path):
+    path = tmp_path / "locked.pdf"
+    document = pymupdf.open()
+    document.new_page()
+    document.save(
+        str(path),
+        encryption=pymupdf.PDF_ENCRYPT_AES_256,
+        owner_pw="owner",
+        user_pw="user",
+    )
+    document.close()
+
+    with pytest.raises(ValueError) as info:
+        documents.render_pdf_pages(path, 1, tmp_path / "render")
+
+    assert "加密" in str(info.value)
+
+
+def test_corrupted_pdf_maps_to_readable_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "VLM_PROVIDER", "qwen")
+    path = tmp_path / "broken.pdf"
+    path.write_bytes(b"not a pdf")
+
+    with pytest.raises(ValueError) as info:
+        asyncio.run(documents.read_blocks(path))
+
+    assert "PDF" in str(info.value)

@@ -23,6 +23,11 @@ TOLERANCE = 1e-6
 def check_question(question: dict) -> tuple[bool, str]:
     """有 verify 就验算，没有就标记「无可验算表达式」（不阻塞）。"""
     verify = question.get("verify")
+    if verify is None:
+        return True, "无可验算表达式，仅做结构检查"
+    if not isinstance(verify, dict):
+        # 模型有时把 verify 写成字符串 / 数组 / 数字：这是坏题，不能静默放行
+        return False, "verify 不是对象"
     if not verify:
         return True, "无可验算表达式，仅做结构检查"
 
@@ -39,8 +44,8 @@ def check_question(question: dict) -> tuple[bool, str]:
 
     try:
         expect = float(verify.get("expect", 0.0))
-    except (TypeError, ValueError):
-        # expect 是 "C" / None 时不能让整批发题中断
+    except (TypeError, ValueError, OverflowError):
+        # expect 是 "C" / None / 10**400 时不能让整批发题中断
         return False, f"期望值不是数值：{verify.get('expect')!r}"
 
     passed = abs(value - expect) <= TOLERANCE
@@ -62,15 +67,20 @@ class VerifyAgent(Agent):
 
         results: list[bool] = []
         for question in questions:
-            passed, detail = check_question(question)
-            question["verified"] = passed
-            question["verify_log"] = detail
+            item = question if isinstance(question, dict) else {}
+            try:
+                passed, detail = check_question(item)
+            except Exception as exc:  # 单题坏掉只记驳回，不拖垮整批
+                passed, detail = False, f"验算异常：{type(exc).__name__}: {exc}"
+            if isinstance(question, dict):
+                question["verified"] = passed
+                question["verify_log"] = detail
             results.append(passed)
             await self.emit(
                 "delta",
-                f"「{brief(question.get('stem_latex', ''))}」"
+                f"「{brief(item.get('stem_latex', ''))}」"
                 f"{'通过' if passed else '驳回'}：{detail}",
-                question=question.get("stem_latex", ""),
+                question=item.get("stem_latex", ""),
                 ok=passed,
             )
 

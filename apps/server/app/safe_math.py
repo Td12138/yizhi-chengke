@@ -23,6 +23,10 @@ ALLOWED_CHARS = re.compile(r"^[0-9A-Za-z.+\-*/^(),= ]+$")
 NAME_RUNS = re.compile(r"[A-Za-z]+")
 # 表达式长度上限：正常验算式远小于这个数
 MAX_EXPR_CHARS = 300
+# 幂指数上限：`9**9**9` 这类指数塔会在求值时把内存/CPU 吃光，先看结构再拒绝
+MAX_POW_EXPONENT = 1000
+# 幂节点数上限：短表达式也能堆出几十层嵌套幂，超过即视为构造攻击
+MAX_POW_NODES = 20
 
 # 允许的函数名 → sympy 实现（白名单外的标识符一律拒绝）
 ALLOWED_FUNCTIONS: dict[str, Any] = {
@@ -37,16 +41,43 @@ ALLOWED_FUNCTIONS: dict[str, Any] = {
 }
 
 # eval 时只暴露这些名字：没有 __import__、没有 open、没有内置函数
+# （evaluate=False 时 sympy 会把 `9**9` 改写成显式 Pow/Mul/Add 构造，需放行这几个结构类）
 GLOBAL_DICT: dict[str, Any] = {
     "__builtins__": {},
     "Symbol": sp.Symbol,
     "Integer": sp.Integer,
     "Float": sp.Float,
+    "Pow": sp.Pow,
+    "Mul": sp.Mul,
+    "Add": sp.Add,
+    "Rational": sp.Rational,
 }
 
 
 class UnsafeInput(ValueError):
     """输入没过白名单：模型给出的表达式 / 代入值不可信。"""
+
+
+def _check_powers(expr: sp.Expr) -> None:
+    """拒绝指数爆炸：指数必须是有限数且绝对值不超过 MAX_POW_EXPONENT。
+
+    必须在 `evaluate=False` 下检查——`9**9**9` 一旦进入求值阶段就会先算
+    9**9 再算 9**(9**9)，内存直接被打满，连异常都来不及抛。
+    """
+    powers = expr.atoms(sp.Pow)
+    if len(powers) > MAX_POW_NODES:
+        raise UnsafeInput(f"幂运算嵌套过多（{len(powers)} 个）")
+    for power in powers:
+        try:
+            exponent = float(power.exp)
+        except (TypeError, ValueError) as exc:
+            raise UnsafeInput("幂指数不是有限数") from exc
+        if not math.isfinite(exponent):
+            raise UnsafeInput("幂指数不是有限数")
+        if abs(exponent) > MAX_POW_EXPONENT:
+            raise UnsafeInput(
+                f"幂指数过大（{exponent:g}），最多允许 {MAX_POW_EXPONENT}"
+            )
 
 
 def parse_expression(text: str) -> sp.Expr:
@@ -63,12 +94,15 @@ def parse_expression(text: str) -> sp.Expr:
             raise UnsafeInput(f"表达式含未知标识符：{name}")
     # ^ 是数学写法，Python/sympy 里是异或；白名单只放行了 ^，这里显式换掉
     code = raw.replace("^", "**")
-    return sp.parse_expr(
+    expr = sp.parse_expr(
         code,
         global_dict=dict(GLOBAL_DICT),
         local_dict=dict(ALLOWED_FUNCTIONS),
-        evaluate=True,
+        # 先只建语法树不求值：指数爆炸要在结构层面拦，不能交给 sympy 算
+        evaluate=False,
     )
+    _check_powers(expr)
+    return expr
 
 
 def parse_subs(raw_subs: Any) -> dict[sp.Symbol, sp.Expr]:

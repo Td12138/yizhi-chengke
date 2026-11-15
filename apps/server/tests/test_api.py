@@ -69,7 +69,9 @@ def test_source_returns_blocks_and_cards(client):
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == source_id
-    assert body["image_path"] == "demo.png"
+    # 绝对路径不下发：前端只用 display_name 与 /image 接口
+    assert "image_path" not in body
+    assert body["display_name"] == "demo.png"
     assert body["blocks"] == fixtures.MOCK_BLOCKS
     assert [c["title"] for c in body["cards"]] == [c["title"] for c in fixtures.MOCK_CARDS]
 
@@ -92,3 +94,39 @@ def test_source_image_serves_original(client, tmp_path):
 def test_source_image_missing_file_returns_404(client, tmp_path):
     source_id = db.insert_source(str(tmp_path / "gone.png"), fixtures.MOCK_BLOCKS)
     assert client.get(f"/api/sources/{source_id}/image").status_code == 404
+
+
+def test_ask_query_length_is_validated(client):
+    assert client.post("/api/ask", json={"query": ""}).status_code == 422
+    assert client.post("/api/ask", json={"query": "x" * 2001}).status_code == 422
+    assert client.post("/api/ask", json={"query": "对称轴是什么"}).status_code == 200
+
+
+def test_card_patch_length_limits(client):
+    card = _seed_card()
+
+    assert (
+        client.patch(f"/api/cards/{card['id']}", json={"title": ""}).status_code
+        == 422
+    )
+    assert (
+        client.patch(
+            f"/api/cards/{card['id']}", json={"summary": "x" * 501}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.patch(
+            f"/api/cards/{card['id']}", json={"title": "x" * 121}
+        ).status_code
+        == 422
+    )
+
+
+def test_generate_rejects_too_many_card_ids(client):
+    response = client.post(
+        "/api/generate",
+        json={"card_ids": list(range(1, 202)), "requirement": "出题", "count": 3},
+    )
+
+    assert response.status_code == 422

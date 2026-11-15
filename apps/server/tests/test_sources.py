@@ -72,7 +72,7 @@ def test_image_endpoint_still_works_after_rename(client, tmp_path):
 
     detail = client.get(f"/api/sources/{source_id}").json()
     assert detail["display_name"] == archived.name
-    assert detail["image_path"] == str(archived)
+    assert "image_path" not in detail
 
 
 def test_image_endpoint_missing_source(client):

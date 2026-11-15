@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
-from app import db
+from app import db, main
 from app.events import EventBus
 from app.orchestrator import Orchestrator
 from app.providers import fixtures
@@ -68,3 +69,61 @@ def test_second_round_delivers_all_verified_questions():
 def test_run_has_no_error_event():
     events = _run_generate()
     assert [e for e in events if e.phase == "error"] == []
+
+
+def test_generate_closes_run_when_card_lookup_fails(monkeypatch):
+    def broken_get_cards(_card_ids):
+        raise RuntimeError("db 挂了")
+
+    monkeypatch.setattr(db, "get_cards", broken_get_cards)
+    bus = EventBus()
+    bus.create(RUN_ID)
+
+    asyncio.run(Orchestrator(bus).generate(RUN_ID, [1], "出几道题", COUNT))
+
+    run = bus.get(RUN_ID)
+    assert run is not None
+    assert run.closed is True, "查卡片抛错也必须关流，否则前端永远等不到结束"
+    errors = [event for event in run.history if event.phase == "error"]
+    assert len(errors) == 1
+    assert "db 挂了" in errors[0].message
+
+
+def test_generate_caps_card_ids(monkeypatch):
+    seen: list[list[int]] = []
+
+    def fake_get_cards(card_ids):
+        seen.append(list(card_ids))
+        return []
+
+    monkeypatch.setattr(db, "get_cards", fake_get_cards)
+    bus = EventBus()
+    bus.create(RUN_ID)
+
+    asyncio.run(
+        Orchestrator(bus).generate(
+            RUN_ID, list(range(1, 251)), "出几道题", COUNT
+        )
+    )
+
+    assert len(seen) == 1
+    assert seen[0] == list(range(1, 201))
+
+
+def test_spawn_logs_background_exception(caplog):
+    async def scenario():
+        async def boom():
+            raise RuntimeError("后台任务炸了")
+
+        main.spawn(boom())
+        await asyncio.sleep(0.05)
+
+    with caplog.at_level(logging.ERROR, logger="app.main"):
+        asyncio.run(scenario())
+
+    logged = [
+        record.exc_info[1]
+        for record in caplog.records
+        if record.exc_info and isinstance(record.exc_info[1], RuntimeError)
+    ]
+    assert logged and str(logged[0]) == "后台任务炸了"

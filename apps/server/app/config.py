@@ -6,10 +6,6 @@ import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-# 桌面版由 Electron 用 APP_DATA_DIR 指到用户可写目录；缺省仍是仓库内 data/
-DATA_DIR = Path(os.environ.get("APP_DATA_DIR") or str(PROJECT_ROOT / "data"))
-UPLOAD_DIR = DATA_DIR / "uploads"
-DB_PATH = DATA_DIR / "yizhi.db"
 
 
 def _load_dotenv(path: Path) -> None:
@@ -24,7 +20,13 @@ def _load_dotenv(path: Path) -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
+# 必须先加载 .env 再读 APP_DATA_DIR：否则写在 .env 里的数据目录不生效
 _load_dotenv(PROJECT_ROOT / ".env")
+
+# 桌面版由 Electron 用 APP_DATA_DIR 指到用户可写目录；缺省仍是仓库内 data/
+DATA_DIR = Path(os.environ.get("APP_DATA_DIR") or str(PROJECT_ROOT / "data"))
+UPLOAD_DIR = DATA_DIR / "uploads"
+DB_PATH = DATA_DIR / "yizhi.db"
 
 # ---- Provider（mock 保证无密钥也能跑通全链路）----
 VLM_PROVIDER = os.environ.get("VLM_PROVIDER", "mock").strip().lower()
@@ -83,6 +85,8 @@ QUESTION_MIN = 1
 QUESTION_MAX = 12
 DEFAULT_QUESTION_COUNT = 5
 RAG_TOP_K = 3
+# 生成接口一次最多接受多少张卡片：超出直接截断，避免一次 SQL 拼进上千个占位符
+MAX_GENERATE_CARD_IDS = 200
 # 逐条推送节奏（秒）：出题一条一题、卡片一张一条，给前端留出逐条出现的时间
 DELTA_PACE_SECONDS = 0.04
 # 批改评语切片推送节奏（秒）：mock 模拟逐字输出时用
@@ -157,9 +161,28 @@ def ensure_dirs() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _provider_ready(
+    provider: str, api_key: str, base_url: str, model: str
+) -> bool:
+    """mock 恒就绪；真实模型必须 key / 地址 / 模型名三项齐全。
+
+    只配了 key 但地址或模型是空串（常见于拼错 provider 名），请求一定失败，
+    这里必须提前报「未就绪」，不能让前端以为可以点生成。
+    """
+    if provider == "mock":
+        return True
+    return bool(
+        api_key.strip() and base_url.strip() and model.strip()
+    )
+
+
 def provider_status() -> dict:
-    """provider 是否具备运行条件：mock 恒就绪，真实模型要求有 key。"""
+    """provider 是否具备运行条件：mock 恒就绪，真实模型要求 key / 地址 / 模型齐全。"""
     return {
-        "vlm_ready": VLM_PROVIDER == "mock" or bool(VLM_API_KEY),
-        "llm_ready": LLM_PROVIDER == "mock" or bool(LLM_API_KEY),
+        "vlm_ready": _provider_ready(
+            VLM_PROVIDER, VLM_API_KEY, VLM_BASE_URL, VLM_MODEL
+        ),
+        "llm_ready": _provider_ready(
+            LLM_PROVIDER, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+        ),
     }

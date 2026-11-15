@@ -431,10 +431,11 @@ def bump_question(card_ids: list[int]) -> None:
 
 
 def top_asked_cards(limit: int = STATS_TOP_N) -> list[dict]:
-    """热度榜：按被问次数降序，同分再按出题次数、id 降序，保证顺序稳定。"""
+    """热度榜：只收被问过的卡片，按次数降序，同分再按出题次数、id 降序。"""
     with connect() as conn:
         rows = conn.execute(
             "SELECT id, title, ask_count, question_count FROM card "
+            "WHERE ask_count > 0 "
             "ORDER BY ask_count DESC, question_count DESC, id DESC LIMIT ?",
             (limit,),
         ).fetchall()

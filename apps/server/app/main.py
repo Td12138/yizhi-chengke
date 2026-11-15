@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,15 +19,35 @@ from .events import bus
 from .kb_routes import router as kb_router
 from .orchestrator import Orchestrator, new_run_id
 
+# 上传落盘分块大小：1 MB 一块，超限时立刻停手，不把整包读进内存
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+# 各字段上限：只拦明显异常的输入，正常文案远小于这些数
+ASK_QUERY_MAX_CHARS = 2000
+CARD_TITLE_MAX_CHARS = 120
+CARD_SUMMARY_MAX_CHARS = 500
+CARD_FORMULA_MAX_CHARS = 2000
+CARD_BODY_MAX_CHARS = 20000
+
+logger = logging.getLogger(__name__)
 orchestrator = Orchestrator(bus)
 background_tasks: set[asyncio.Task] = set()
+
+
+def _log_background_result(task: asyncio.Task) -> None:
+    """后台任务收尾：日志留一条栈，客户端仍只看 SSE 里的 error 事件。"""
+    background_tasks.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.exception("后台任务失败：%s", task.get_name(), exc_info=exc)
 
 
 def spawn(coro) -> None:
     """持有引用，避免后台任务被 GC 回收。"""
     task = asyncio.create_task(coro)
     background_tasks.add(task)
-    task.add_done_callback(background_tasks.discard)
+    task.add_done_callback(_log_background_result)
 
 
 @asynccontextmanager
@@ -47,7 +68,9 @@ app.include_router(kb_router)
 
 
 class GenerateRequest(BaseModel):
-    card_ids: list[int] = Field(default_factory=list)
+    card_ids: list[int] = Field(
+        default_factory=list, max_length=config.MAX_GENERATE_CARD_IDS
+    )
     requirement: str = "出几道基础题"
     count: int = Field(default=config.DEFAULT_QUESTION_COUNT)
 
@@ -65,16 +88,18 @@ class ReviewRequest(BaseModel):
 
 
 class AskRequest(BaseModel):
-    query: str
+    query: str = Field(min_length=1, max_length=ASK_QUERY_MAX_CHARS)
 
 
 class CardPatch(BaseModel):
     """人工修正卡片：只给要改的字段，缺省字段保持原值。"""
 
-    title: str | None = None
-    summary: str | None = None
-    formula: str | None = None
-    body: str | None = None
+    title: str | None = Field(
+        default=None, min_length=1, max_length=CARD_TITLE_MAX_CHARS
+    )
+    summary: str | None = Field(default=None, max_length=CARD_SUMMARY_MAX_CHARS)
+    formula: str | None = Field(default=None, max_length=CARD_FORMULA_MAX_CHARS)
+    body: str | None = Field(default=None, max_length=CARD_BODY_MAX_CHARS)
 
 
 @app.get("/api/health")
@@ -104,13 +129,23 @@ async def ingest(file: UploadFile = File(...)) -> dict:
 
     # 文档比图片大得多（PDF 常常十几 MB），按类型给不同上限
     limit = config.MAX_DOC_BYTES if kind == "document" else config.MAX_UPLOAD_BYTES
-    data = await file.read()
-    if len(data) > limit:
-        raise HTTPException(413, f"文件超过 {limit // (1024 * 1024)} MB 上限")
-
     config.ensure_dirs()
     upload_path = config.UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
-    upload_path.write_bytes(data)
+    total = 0
+    try:
+        with upload_path.open("wb") as handle:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise HTTPException(413, f"文件超过 {limit // (1024 * 1024)} MB 上限")
+                handle.write(chunk)
+    except BaseException:
+        # 超限 / 连接中断：删掉半成品，别让 uploads 目录留下残缺文件
+        upload_path.unlink(missing_ok=True)
+        raise
 
     run_id = new_run_id()
     bus.create(run_id)
@@ -155,14 +190,16 @@ async def sources() -> dict:
 
 @app.get("/api/sources/{source_id}")
 async def source_detail(source_id: int) -> dict:
-    """来源详情：识别原文块 + 该来源的卡片，用于原图与结果并排核对。"""
+    """来源详情：识别原文块 + 该来源的卡片，用于原图与结果并排核对。
+
+    不返回 image_path：服务器绝对路径对前端没用，且会泄露本机目录结构。
+    """
     source = db.get_source(source_id)
     if source is None:
         raise HTTPException(404, f"来源 {source_id} 不存在")
     return {
         "id": source["id"],
         "display_name": source.get("display_name") or Path(source["image_path"]).name,
-        "image_path": source["image_path"],
         "created_at": source["created_at"],
         "blocks": source["blocks"],
         "cards": db.get_cards_by_source(source_id),
