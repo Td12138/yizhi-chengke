@@ -52,16 +52,62 @@ const RADIUS_MIN = 10;
 const RADIUS_SCALE = 4.2;
 const RADIUS_MAX = 28;
 
-/** 无提问记录时的中性色 */
-const COLOR_NEUTRAL_FILL = "#f1e9da";
-const COLOR_NEUTRAL_STROKE = "#cbbea8";
-/** 被问得少时的浅主色（#cfe6e1）与被问得多时的主色（#0f766e） */
-const COLOR_LOW: [number, number, number] = [207, 230, 225];
-const COLOR_ACCENT: [number, number, number] = [15, 118, 110];
-/** 深主色描边（#084a44），让重色节点轮廓更实 */
-const COLOR_ACCENT_DARK: [number, number, number] = [8, 74, 68];
+/* ---------- 学术脉络图配色：暖纸底 + 松烟绿 + 细实线 ---------- */
+/** 没出过题也没被问过的中性纸色 */
+const COLOR_NEUTRAL_FILL = "#efe9dc";
+const COLOR_NEUTRAL_STROKE = "#9c917f";
+/** 有题未问的浅松烟绿（#dce8e3）；被问深度递增时向主色（#1b4d3e）过渡 */
+const COLOR_LOW: [number, number, number] = [220, 232, 227];
+const COLOR_ACCENT: [number, number, number] = [27, 77, 62];
+/** 深主色描边（#0f342a），让重色节点轮廓更实 */
+const COLOR_ACCENT_DARK: [number, number, number] = [15, 52, 42];
+const COLOR_FRESH_FILL = "#dce8e3";
+const COLOR_FRESH_STROKE = "#1b4d3e";
 const COLOR_TEXT = "#2e2a23";
-const COLOR_TEXT_LIGHT = "#f7f4ec";
+const COLOR_TEXT_LIGHT = "#fbf8f1";
+/** 连线：默认浅褐，高亮松烟绿 */
+const COLOR_EDGE = "#9c917f";
+const COLOR_EDGE_ACTIVE = "#1b4d3e";
+/** 图版编号 / 轴注用衬线字 */
+const SERIF = "Georgia, 'Times New Roman', serif";
+
+/** 节点内圈（细实线双圈）：内缩距离、线宽、透明度 */
+const INNER_RING_INSET = 3.5;
+const INNER_RING_WIDTH = 0.8;
+const INNER_RING_OPACITY = 0.55;
+/** 半径够大才在节点中央写出题数 / 问次徽标 */
+const BADGE_MIN_RADIUS = 15;
+const BADGE_FONT_SIZE = 10;
+/** 徽标数字基线相对圆心下移的比例（视觉居中） */
+const BADGE_BASELINE_RATIO = 0.35;
+/** 填充深到这个程度时徽标改用纸色 */
+const BADGE_LIGHT_TEXT_DEPTH = 0.45;
+/** 选中 / 悬停时无关节点降到这个透明度 */
+const NODE_DIM_OPACITY = 0.45;
+
+/** 连线宽度、透明度与高亮加粗量 */
+const EDGE_WIDTH_BASE = 0.7;
+const EDGE_WIDTH_SCALE = 2.4;
+const EDGE_OPACITY_BASE = 0.14;
+const EDGE_OPACITY_SCALE = 0.5;
+const EDGE_DIM_FACTOR = 0.28;
+const EDGE_ACTIVE_OPACITY = 0.85;
+const EDGE_ACTIVE_BOOST = 1.2;
+
+/**
+ * 左上角统计行：沿用 .graph-note 的等宽小字，只去掉外框与底色，
+ * 读起来像图版的编号说明而不是状态药丸。
+ * 定位（top / left / right）全部交给 .graph-note-left，不在组件里写死。
+ */
+const CAPTION_STYLE: CSSProperties = {
+  position: "absolute",
+  padding: 0,
+  border: "none",
+  background: "transparent",
+  borderRadius: 0,
+  fontVariantNumeric: "tabular-nums",
+  pointerEvents: "none",
+};
 
 type Props = {
   graph: GraphData | null;
@@ -382,16 +428,28 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
 
   const selected = selectedId === null ? null : byId.get(selectedId) ?? null;
   const hovered = hoverId === null ? null : byId.get(hoverId) ?? null;
-  const selectedEdges = selected
-    ? new Set(
-        layout.edges
-          .filter(
-            (edge) =>
-              edge.source === selected.node.id || edge.target === selected.node.id
-          )
-          .map((edge) => edge.key)
-      )
-    : null;
+
+  /** 当前聚焦的节点：选中优先，其次悬停；聚焦时邻居保持清晰、无关节点淡出 */
+  const focusId = selected?.node.id ?? hovered?.node.id ?? null;
+
+  const focusEdges = useMemo(() => {
+    if (focusId === null) return null;
+    return new Set(
+      layout.edges
+        .filter((edge) => edge.source === focusId || edge.target === focusId)
+        .map((edge) => edge.key)
+    );
+  }, [focusId, layout.edges]);
+
+  const focusNodes = useMemo(() => {
+    if (focusId === null) return null;
+    const ids = new Set<number>([focusId]);
+    for (const edge of layout.edges) {
+      if (edge.source === focusId) ids.add(edge.target);
+      else if (edge.target === focusId) ids.add(edge.source);
+    }
+    return ids;
+  }, [focusId, layout.edges]);
 
   const toggle = (id: number) =>
     setSelectedId((prev) => (prev === id ? null : id));
@@ -435,11 +493,16 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
   return (
     <div className="graph">
       <div className="graph-wrap" ref={setWrap} style={{ height: canvasHeight }}>
-        {layout.truncated && (
-          <span className="graph-note">
-            共 {layout.total} 个 · 显示前 {MAX_NODES} 个
-          </span>
-        )}
+        {/* 图版说明：截断时把「显示多少 / 共多少」一起写进这一行，只留左上角一处 */}
+        <span
+          className="graph-note graph-note-left"
+          style={CAPTION_STYLE}
+        >
+          {layout.truncated
+            ? `Fig. 知识脉络 · 显示 ${layout.nodes.length}/${layout.total} 节点 · ${layout.edges.length} 关联`
+            : `Fig. 知识脉络 · ${layout.total} 节点 / ${layout.edges.length} 关联`}
+        </span>
+
         <svg
           className="graph-svg"
           viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
@@ -448,8 +511,8 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
         >
           <g>
             {layout.edges.map((edge) => {
-              const active = selectedEdges?.has(edge.key) ?? false;
-              const dim = selectedEdges !== null && !active;
+              const active = focusEdges?.has(edge.key) ?? false;
+              const dim = focusEdges !== null && !active;
               return (
                 <line
                   key={edge.key}
@@ -458,10 +521,17 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
                   y1={edge.y1}
                   x2={edge.x2}
                   y2={edge.y2}
-                  stroke={active ? "var(--accent)" : "#a4977f"}
-                  strokeWidth={0.7 + edge.strength * 2.4}
+                  stroke={active ? COLOR_EDGE_ACTIVE : COLOR_EDGE}
+                  strokeWidth={
+                    EDGE_WIDTH_BASE +
+                    edge.strength * EDGE_WIDTH_SCALE +
+                    (active ? EDGE_ACTIVE_BOOST : 0)
+                  }
                   strokeOpacity={
-                    active ? 0.75 : (0.14 + edge.strength * 0.5) * (dim ? 0.35 : 1)
+                    active
+                      ? EDGE_ACTIVE_OPACITY
+                      : (EDGE_OPACITY_BASE + edge.strength * EDGE_OPACITY_SCALE) *
+                        (dim ? EDGE_DIM_FACTOR : 1)
                   }
                   strokeLinecap="round"
                 />
@@ -473,18 +543,39 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
               const { node } = item;
               const isSelected = selected?.node.id === node.id;
               const isHovered = hovered?.node.id === node.id;
-              const hasAsk = (node.ask_count ?? 0) > 0;
+              const ask = node.ask_count ?? 0;
+              const questions = node.question_count ?? 0;
+              const hasAsk = ask > 0;
+              const hasQuestions = questions > 0;
+              // 有题未问给浅松烟绿，完全没进过流程才用中性纸色
               const fill = hasAsk
                 ? mix(COLOR_LOW, COLOR_ACCENT, 0.2 + item.depth * 0.8)
-                : COLOR_NEUTRAL_FILL;
+                : hasQuestions
+                  ? COLOR_FRESH_FILL
+                  : COLOR_NEUTRAL_FILL;
               const stroke = hasAsk
                 ? mix(COLOR_ACCENT, COLOR_ACCENT_DARK, item.depth)
-                : COLOR_NEUTRAL_STROKE;
+                : hasQuestions
+                  ? COLOR_FRESH_STROKE
+                  : COLOR_NEUTRAL_STROKE;
+              // 聚焦时无关节点淡出，邻居保持清晰
+              const dimmed = focusNodes !== null && !focusNodes.has(node.id);
               const label = layout.labelIds.includes(node.id) || isSelected || isHovered;
+              // 半径够大才在圈内写数字：被问过写问次，否则写出题数
+              const badge =
+                item.r >= BADGE_MIN_RADIUS ? (hasAsk ? ask : questions) : 0;
+              const badgeFill =
+                hasAsk && item.depth > BADGE_LIGHT_TEXT_DEPTH
+                  ? COLOR_TEXT_LIGHT
+                  : COLOR_TEXT;
               return (
                 <g
                   key={node.id}
                   transform={`translate(${item.x.toFixed(1)} ${item.y.toFixed(1)})`}
+                  style={{
+                    opacity: dimmed ? NODE_DIM_OPACITY : 1,
+                    transition: "opacity var(--motion-fast) ease",
+                  }}
                 >
                   <g
                     className={`graph-node graph-node-in ${
@@ -499,9 +590,7 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
                     }
                     role="button"
                     tabIndex={0}
-                    aria-label={`${node.title}，被问 ${node.ask_count ?? 0} 次，出题 ${
-                      node.question_count ?? 0
-                    } 道`}
+                    aria-label={`${node.title}，被问 ${ask} 次，出题 ${questions} 道`}
                     onClick={() => toggle(node.id)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
@@ -514,16 +603,13 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
                     onFocus={() => setHoverId(node.id)}
                     onBlur={() => setHoverId(null)}
                   >
-                    <title>
-                      {node.title} · 被问 {node.ask_count ?? 0} 次 · 出题{" "}
-                      {node.question_count ?? 0} 道
-                    </title>
+                    <title>{`${node.title} · 被问 ${ask} 次 · 出题 ${questions} 道`}</title>
                     {isSelected && (
                       <circle
                         r={item.r + 4}
                         fill="none"
-                        stroke="var(--accent)"
-                        strokeWidth={1.2}
+                        stroke={COLOR_EDGE_ACTIVE}
+                        strokeWidth={1}
                         strokeDasharray="3 3"
                       />
                     )}
@@ -532,8 +618,32 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
                       r={item.r}
                       fill={fill}
                       stroke={isHovered || isSelected ? COLOR_TEXT : stroke}
-                      strokeWidth={isHovered || isSelected ? 2 : 1.4}
+                      strokeWidth={isHovered || isSelected ? 1.8 : 1.2}
                     />
+                    {badge > 0 && (
+                      <>
+                        {/* 细实线内圈：学术图谱的「双圈」观感，不发光 */}
+                        <circle
+                          className="graph-node-dot"
+                          r={item.r - INNER_RING_INSET}
+                          fill="none"
+                          stroke={stroke}
+                          strokeWidth={INNER_RING_WIDTH}
+                          strokeOpacity={INNER_RING_OPACITY}
+                          pointerEvents="none"
+                        />
+                        <text
+                          y={BADGE_FONT_SIZE * BADGE_BASELINE_RATIO}
+                          textAnchor="middle"
+                          fontSize={BADGE_FONT_SIZE}
+                          fontFamily={SERIF}
+                          fill={badgeFill}
+                          pointerEvents="none"
+                        >
+                          {badge}
+                        </text>
+                      </>
+                    )}
                     {label && (
                       <text
                         className="graph-label"
@@ -560,7 +670,7 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
           </div>
         )}
         <span className="graph-legend">
-          节点大小 = 出题数 · 颜色深浅 = 被问次数 · 连线 = 共享标签
+          节点大小 = 出题数 · 浅绿 = 有题未问 · 深绿 = 被问次数 · 连线 = 共享标签
         </span>
       </div>
 

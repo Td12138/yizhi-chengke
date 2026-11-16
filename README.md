@@ -6,7 +6,7 @@
 
 ![主界面](docs/images/main.png)
 
-> 截图摄于「六个 Agent」版本；当前界面为七个 Agent（新增批改），功能与布局以实际运行为准。
+> 截图取自当前「纸墨讲义风」界面（七个 Agent，含批改），数据由 `scripts/prepare_demo.py` 预置。
 
 ## 它解决什么
 

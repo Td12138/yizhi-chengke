@@ -82,6 +82,39 @@ const SAMPLES = [
   },
 ];
 
+/** 面板 3 的快捷需求预设：点一下填进输入框与题数，不直接触发生成 */
+const QUICK_PROMPTS = [
+  {
+    label: "5 道中等变式题",
+    requirement: "给我出 5 道这页的变式题，中等难度",
+    count: 5,
+  },
+  {
+    label: "3 道综合拔高题",
+    requirement: "出 3 道结合顶点与判别式的拔高题，偏难",
+    count: 3,
+  },
+  {
+    label: "3 道基础概念题",
+    requirement: "出 3 道检验基本公式记忆的入门题",
+    count: 3,
+  },
+] as const;
+
+/** 难度英文 → 中文展示（后端多为 easy / medium / hard，其余原样显示） */
+const DIFFICULTY_LABEL: Record<string, string> = {
+  easy: "基础",
+  medium: "中等",
+  hard: "拔高",
+};
+
+/** 难度 → 色彩修饰类（未收录的难度不加上色，保持默认灰胶囊） */
+const DIFFICULTY_CLASS: Record<string, string> = {
+  easy: "tag-diff-easy",
+  medium: "tag-diff-medium",
+  hard: "tag-diff-hard",
+};
+
 const ACTION_LABEL: Record<string, string> = {
   ingest: "上传识别",
   generate: "生成练习卷",
@@ -162,9 +195,14 @@ export default function App() {
   const [error, setError] = useState<RunError | null>(null);
   const [notice, setNotice] = useState("");
   const [preview, setPreview] = useState<FilePreview | null>(null);
+  /** 文件正被拖到上传区上方：只影响高亮样式，不影响逻辑 */
+  const [dragOver, setDragOver] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [plotExpression, setPlotExpression] = useState("x^2 - 4x + 3");
-  const [requirement, setRequirement] = useState("给我出 5 道这页的变式题，中等难度");
+  /** 初始需求直接取第一条快捷预设，两处文案不再各写一份 */
+  const [requirement, setRequirement] = useState<string>(
+    QUICK_PROMPTS[0].requirement
+  );
   const [count, setCount] = useState(5);
   const [askQuery, setAskQuery] = useState("");
   const [askAnswer, setAskAnswer] = useState<AskAnswer | null>(null);
@@ -839,6 +877,7 @@ export default function App() {
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
+    setDragOver(false);
     if (busy) return;
     const file = event.dataTransfer.files?.[0];
     if (file) void ingest(file);
@@ -858,21 +897,55 @@ export default function App() {
           </div>
         </div>
         <div className="providers">
-          <span className={`pill ${health?.vlm_provider === "mock" ? "pill-mock" : "pill-live"}`}>
-            VLM {health?.vlm_provider ?? "…"}
+          <span
+            className={`meta ${
+              health?.vlm_provider === "mock" ? "meta-mock" : "meta-live"
+            }`}
+          >
+            VLM：{health?.vlm_provider ?? "…"}
           </span>
-          <span className={`pill ${health?.llm_provider === "mock" ? "pill-mock" : "pill-live"}`}>
-            LLM {health?.llm_provider ?? "…"}
+          <span className="meta-dot" aria-hidden="true">
+            ·
+          </span>
+          <span
+            className={`meta ${
+              health?.llm_provider === "mock" ? "meta-mock" : "meta-live"
+            }`}
+          >
+            LLM：{health?.llm_provider ?? "…"}
           </span>
           {health && health.ready === false && (
-            <span
-              className="pill pill-warn"
-              title="所选真实模型缺 Key / Base URL / 模型名，接口会明确报错"
-            >
-              模型未就绪
-            </span>
+            <>
+              <span className="meta-dot" aria-hidden="true">
+                ·
+              </span>
+              <span
+                className="meta meta-warn"
+                title="所选真实模型缺 Key / Base URL / 模型名，接口会明确报错"
+              >
+                模型未就绪
+              </span>
+            </>
           )}
-          {busy && <span className="pill pill-busy">运行中 · {busyLabel}</span>}
+          {busy && (
+            <>
+              <span className="meta-dot" aria-hidden="true">
+                ·
+              </span>
+              <span className="meta meta-busy">运行中 · {busyLabel}</span>
+            </>
+          )}
+          <span className="meta-dot" aria-hidden="true">
+            ·
+          </span>
+          <button
+            type="button"
+            className="meta-action"
+            onClick={() => setTourOpen(true)}
+            title="重新打开 4 步功能导览"
+          >
+            ? 新手引导
+          </button>
         </div>
       </header>
 
@@ -904,9 +977,20 @@ export default function App() {
         <section className="panel panel-input">
           <h2>1 · 拍一页纸</h2>
           <div
-            className={`dropzone ${busy === "ingest" ? "dropzone-busy" : ""}`}
+            className={`dropzone ${busy === "ingest" ? "dropzone-busy" : ""} ${
+              dragOver && !busy ? "dropzone-drag" : ""
+            }`}
             data-tour="upload"
-            onDragOver={(event) => event.preventDefault()}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!busy) setDragOver(true);
+            }}
+            onDragLeave={(event) => {
+              // 指针从子元素（图标 / 按钮）划过时 relatedTarget 仍是内部节点，不算真的离开
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setDragOver(false);
+              }
+            }}
             onDrop={onDrop}
           >
             {preview ? (
@@ -923,9 +1007,44 @@ export default function App() {
                 </div>
               )
             ) : (
-              <p className="dropzone-hint">
-                拖入图片或 PDF / DOCX 文件，也可以点下方按钮选择
-              </p>
+              <>
+                {/* 纸张 + 扫描线：纯内联 SVG，不吃图标库，颜色随主色 */}
+                <svg
+                  className="dropzone-icon"
+                  viewBox="0 0 48 48"
+                  fill="none"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <rect
+                    x="10"
+                    y="7"
+                    width="28"
+                    height="34"
+                    rx="4"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                  <path
+                    d="M17 16h14M17 23h14M17 30h8"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    opacity="0.5"
+                  />
+                  <path
+                    d="M4 24h40"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeDasharray="3 5"
+                    opacity="0.9"
+                  />
+                </svg>
+                <p className="dropzone-hint">
+                  拖入图片或 PDF / DOCX 文件，也可以点下方按钮选择
+                </p>
+              </>
             )}
             {busy === "ingest" && (
               <p className="dropzone-status" role="status">
@@ -1098,6 +1217,25 @@ export default function App() {
             </button>
           </div>
 
+          {/* 快捷需求：只填输入框与题数，是否出题仍由「生成练习卷」决定 */}
+          <div className="samples presets">
+            <span className="samples-label">快捷需求：</span>
+            {QUICK_PROMPTS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className="sample-chip"
+                disabled={busy !== null}
+                onClick={() => {
+                  setRequirement(preset.requirement);
+                  setCount(clampCount(preset.count));
+                }}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
           <div className="questions" data-tour="questions">
             {questions.length > 0 && (
               <div className="verify-summary">
@@ -1127,6 +1265,11 @@ export default function App() {
               const reviewing = review?.status === "running";
               // 流式追加的草稿题还没有库 id（负数占位），先锁住作答与判分
               const ready = question.id > 0;
+              // 后端难度多为 easy / medium / hard：汉化并上色，未收录的原样显示
+              const rawDifficulty = String(question.difficulty ?? "").trim();
+              const diffKey = rawDifficulty.toLowerCase();
+              const diffLabel = DIFFICULTY_LABEL[diffKey] ?? (rawDifficulty || "难度待定");
+              const diffClass = DIFFICULTY_CLASS[diffKey] ?? "";
               return (
                 <article
                   key={question.id}
@@ -1139,7 +1282,7 @@ export default function App() {
                   }}
                 >
                   <div className="q-tags">
-                    <span className="tag">{question.difficulty || "难度待定"}</span>
+                    <span className={`tag ${diffClass}`}>{diffLabel}</span>
                     {ready ? (
                       <span
                         className={`tag ${question.verified ? "tag-ok" : "tag-warn"}`}
@@ -1181,8 +1324,11 @@ export default function App() {
                                 }))
                               }
                             />
-                            <span>
-                              {letter}. {option}
+                            <span className="option-letter" aria-hidden="true">
+                              {letter}
+                            </span>
+                            <span className="option-text">
+                              <MathText text={option} />
                             </span>
                           </label>
                         );
