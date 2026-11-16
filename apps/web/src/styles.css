@@ -2026,6 +2026,21 @@ body {
   font-weight: 700;
 }
 
+/* 方法归因（仅真实 provider）：先承认学生的方法，再谈更优解法 */
+.review-student-method {
+  margin: 0 0 6px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.review-student-method-ok {
+  color: var(--ok);
+}
+
+.review-student-method-bad {
+  color: var(--bad);
+}
+
 .review-issues {
   margin: 0;
   padding-left: 18px;

@@ -72,3 +72,38 @@ test("批改结论：缺字段补空，坏步骤被丢掉", () => {
   assert.equal(result.better_method, null);
   assert.deepEqual(result.issues, []);
 });
+
+test("流式题目带验算级别，旧后端缺字段补空串", () => {
+  assert.equal(
+    normalizeStreamedQuestion({ verify_level: "structural" }, -1).verify_level,
+    "structural"
+  );
+  assert.equal(normalizeStreamedQuestion({}, -1).verify_level, "");
+});
+
+test("流式卡片带修正时间，缺字段为 null", () => {
+  assert.equal(normalizeStreamedCard({ revised_at: 123 }, -1).revised_at, 123);
+  assert.equal(normalizeStreamedCard({}, -1).revised_at, null);
+});
+
+test("批改结论：方法归因缺名字视为没有归因", () => {
+  const withMethod = readReviewResult({
+    score: 100,
+    student_method: { name: "配方法", valid: true, note: "等价于公式法" },
+  });
+  assert.deepEqual(withMethod?.student_method, {
+    name: "配方法",
+    valid: true,
+    note: "等价于公式法",
+  });
+
+  assert.equal(readReviewResult({ score: 100 })?.student_method, null);
+  assert.equal(
+    readReviewResult({ score: 100, student_method: { valid: true } })?.student_method,
+    null
+  );
+  assert.equal(
+    readReviewResult({ score: 100, student_method: "配方法" })?.student_method,
+    null
+  );
+});

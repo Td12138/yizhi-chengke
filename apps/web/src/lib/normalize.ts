@@ -10,6 +10,7 @@ import type {
   ReviewFirstError,
   ReviewResult,
   ReviewStep,
+  ReviewStudentMethod,
   ReviewVerdict,
 } from "../types";
 
@@ -104,6 +105,18 @@ export function readBetterMethod(raw: any): ReviewBetterMethod | null {
   return { name: name || "推荐解法", why, steps };
 }
 
+/** 方法归因：没有方法名视为没有归因（mock 与旧后端都不给这个字段） */
+export function readStudentMethod(raw: any): ReviewStudentMethod | null {
+  if (!raw || typeof raw !== "object") return null;
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  if (!name) return null;
+  return {
+    name,
+    valid: Boolean(raw.valid),
+    note: typeof raw.note === "string" ? raw.note : "",
+  };
+}
+
 /** 批改结论：缺字段补空；score 不是数字视为没拿到结论（调用方据此报错重试） */
 export function readReviewResult(raw: any): ReviewResult | null {
   if (!raw || typeof raw !== "object") return null;
@@ -130,6 +143,7 @@ export function readReviewResult(raw: any): ReviewResult | null {
     reference: typeof raw.reference === "string" ? raw.reference : "",
     steps: readReviewSteps(raw.steps),
     first_error: readFirstError(raw.first_error),
+    student_method: readStudentMethod(raw.student_method),
     better_method: readBetterMethod(raw.better_method),
     method_comparison:
       typeof raw.method_comparison === "string" ? raw.method_comparison : "",

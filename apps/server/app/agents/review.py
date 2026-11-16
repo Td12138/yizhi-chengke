@@ -12,6 +12,8 @@
   （攒够 8 字就发一片），用户等待时间因此真的缩短；模型在评语末尾附一段 fenced JSON
   供结构化解析。流式失败时回退到一次性 `chat_json`，并在事件里写明「已回退」。
   只有这条路径允许做方法论推断（模型确实读了作答），其结论原样透出。
+  v0.1.5 起结构化结果含 `student_method`（方法归因）：从作答识别学生实际用的方法
+  并判断是否成立——另一种正确解法会被承认，而不是因写法不同被扣分。
 """
 
 from __future__ import annotations
@@ -85,6 +87,14 @@ def render_review_text(review: dict) -> str:
         lines.append(f"为什么：{reason}")
     elif steps:
         lines.append(f"{len(steps)} 步全部覆盖，没有错误步骤")
+
+    student = review.get("student_method")
+    if student:
+        # 方法归因只在真实 provider 路径出现；另一种正确解法必须被承认
+        label = "成立" if student["valid"] else "不成立"
+        lines.append(f"你的解法：{student['name']}（{label}）")
+        if student.get("note"):
+            lines.append(f"  · {student['note']}")
 
     better = review.get("better_method") or {}
     if better.get("name") or better.get("steps"):
@@ -198,6 +208,23 @@ def _as_better_method(value: Any) -> dict | None:
     return {"name": name, "why": str(value.get("why") or "").strip(), "steps": steps}
 
 
+def _as_student_method(value: Any) -> dict | None:
+    """方法归因（仅真实 provider 会给出）：没有方法名就视为没有归因。
+
+    mock 规则不做语义推断，永远不产出该字段——这是 mock 与真实路径的能力边界。
+    """
+    if not isinstance(value, dict):
+        return None
+    name = str(value.get("name") or "").strip()
+    if not name:
+        return None
+    return {
+        "name": name,
+        "valid": bool(value.get("valid")),
+        "note": str(value.get("note") or "").strip(),
+    }
+
+
 def _as_lines(value: Any) -> list[str]:
     if isinstance(value, str):
         value = [value]
@@ -231,6 +258,7 @@ def coerce_review(raw: Any, question: dict, base: dict | None = None) -> dict:
         "reference": str(question.get("answer") or ""),
         "steps": steps,
         "first_error": _as_first_error(pick("first_error"), steps),
+        "student_method": _as_student_method(pick("student_method")),
         "better_method": _as_better_method(pick("better_method")),
         "method_comparison": str(pick("method_comparison") or "").strip(),
     }

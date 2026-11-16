@@ -56,11 +56,17 @@ SYSTEM_PROMPTS = {
         '"steps": [{"index": int, "expect": "该步应该做什么", "found": bool, '
         '"note": "学生的实际写法或缺失说明"}], '
         '"first_error": {"step": int, "reason": str} 或 null, '
+        '"student_method": {"name": str, "valid": bool, "note": str} 或 null, '
         '"better_method": {"name": str, "why": str, "steps": [str]}, '
         '"method_comparison": str, '
         '"issues": [str], "suggestion": str}\n```。'
         "steps 按标准答案的解题过程拆成 2-5 步；first_error 是第一个未覆盖或数值不符的步骤，"
-        "全部都覆盖时给 null；better_method 只在学生解法不是最优时给，并说明为什么更优。"
+        "全部都覆盖时给 null。"
+        "student_method 是方法归因：从作答本身识别学生实际使用的方法（如配方法/公式法/因式分解），"
+        "name 给方法名，valid 判断该方法对此题是否成立（另一种正确解法必须承认其成立，"
+        "不能因为与标准答案写法不同就判不成立），note 用一句话说明依据；"
+        "作答为空或完全看不出方法时给 null。"
+        "better_method 只在学生解法不是最优时给，并说明为什么更优。"
         "评语必须与 JSON 结论一致；不要解释格式本身。"
     ),
 }
@@ -72,6 +78,7 @@ REVIEW_JSON_HINT = (
     '"points": [{"hit": bool, "text": str}], '
     '"steps": [{"index": int, "expect": str, "found": bool, "note": str}], '
     '"first_error": {"step": int, "reason": str} 或 null, '
+    '"student_method": {"name": str, "valid": bool, "note": str} 或 null, '
     '"better_method": {"name": str, "why": str, "steps": [str]}, '
     '"method_comparison": str, "issues": [str], "suggestion": str}'
 )

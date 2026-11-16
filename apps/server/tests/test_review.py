@@ -28,6 +28,7 @@ RESULT_KEYS = {
     "reference",
     "steps",
     "first_error",
+    "student_method",
     "better_method",
     "method_comparison",
 }
@@ -489,3 +490,80 @@ def test_midstream_failure_discards_partial_text(monkeypatch):
     assert "中断前已经发出的半句" not in result["text"]
     assert result["text"] == render_review_text(result)
     assert result["score"] == 40
+
+
+# ---- 方法归因 student_method（v0.1.5，仅真实 provider 产出）----
+
+
+def test_review_prompt_asks_for_student_method():
+    """请求体构造：system prompt 与 JSON hint 都带方法归因 schema。"""
+    from app.providers.llm import REVIEW_JSON_HINT, SYSTEM_PROMPTS
+
+    assert "student_method" in SYSTEM_PROMPTS["review"]
+    assert "student_method" in REVIEW_JSON_HINT
+    # 另一种正确解法必须被承认，写进 prompt 防止模型按写法扣分
+    assert "另一种正确解法" in SYSTEM_PROMPTS["review"]
+
+
+def test_coerce_review_accepts_valid_student_method():
+    from app.agents.review import coerce_review
+
+    raw = {
+        "score": 100,
+        "verdict": "correct",
+        "student_method": {
+            "name": "配方法",
+            "valid": True,
+            "note": "作答先配方再读顶点，与公式法等价",
+        },
+    }
+    result = coerce_review(raw, AXIS_Q)
+    assert result["student_method"] == {
+        "name": "配方法",
+        "valid": True,
+        "note": "作答先配方再读顶点，与公式法等价",
+    }
+    assert "你的解法：配方法（成立）" in render_review_text(result)
+
+
+@pytest.mark.parametrize(
+    "raw_method",
+    [None, "配方法", {}, {"name": ""}, {"valid": True}, 42],
+)
+def test_coerce_review_rejects_malformed_student_method(raw_method):
+    from app.agents.review import coerce_review
+
+    result = coerce_review({"score": 50, "student_method": raw_method}, AXIS_Q)
+    assert result["student_method"] is None
+
+
+def test_mock_review_never_claims_method_attribution():
+    """mock 只做字面比对：能力边界不变，student_method 恒为 None。"""
+    result = _result(_review_events(SQUARE_Q, "先配方：y=(x-2)^2-1"))
+    assert result["student_method"] is None
+    assert "你的解法：" not in result["text"]
+
+
+def test_real_path_passes_student_method_through(monkeypatch):
+    """真实 provider 路径：模型给的归因原样透出（含 valid=False 的情形）。"""
+    monkeypatch.setattr(config, "LLM_PROVIDER", "openai")
+
+    async def fake_stream(*_args, **_kwargs):
+        yield (
+            "评语：方法可行但计算有误。"
+            '```json\n{"score": 60, "verdict": "partial", '
+            '"student_method": {"name": "公式法", "valid": false, '
+            '"note": "判别式算错"}}\n```'
+        )
+
+    monkeypatch.setattr(llm, "chat_stream", fake_stream)
+    result = _result(_review_events(AXIS_Q, "x=(4±sqrt(16-12))/2"))
+    assert result["student_method"] == {
+        "name": "公式法",
+        "valid": False,
+        "note": "判别式算错",
+    }
+    # 流式路径的 text 是模型原文（评语 + JSON 围栏），结构化字段另行解析
+    assert "评语：方法可行但计算有误。" in result["text"]
+    # 渲染文案（回退路径用）里方法归因如实呈现
+    assert "你的解法：公式法（不成立）" in render_review_text(result)

@@ -84,6 +84,13 @@ export interface ReviewBetterMethod {
   steps: string[];
 }
 
+/** 方法归因（仅真实 provider）：学生实际用的方法 + 是否成立 + 依据 */
+export interface ReviewStudentMethod {
+  name: string;
+  valid: boolean;
+  note: string;
+}
+
 /** 批改结论的整体判定 */
 export type ReviewVerdict = "correct" | "partial" | "wrong";
 
@@ -99,6 +106,8 @@ export interface ReviewResult {
   /** 分步清单（旧后端可能没有此字段，归一化后为空数组） */
   steps: ReviewStep[];
   first_error: ReviewFirstError | null;
+  /** 方法归因：mock 与旧后端为 null，仅真实 provider 给出 */
+  student_method: ReviewStudentMethod | null;
   better_method: ReviewBetterMethod | null;
   /** 一句话结论：你的解法几步、推荐解法几步 */
   method_comparison: string;

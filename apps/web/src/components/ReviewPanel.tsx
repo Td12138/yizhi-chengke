@@ -39,6 +39,7 @@ export default function ReviewPanel({
   const tone = verdict ?? "partial";
   const steps = result?.steps ?? [];
   const firstError = result?.first_error ?? null;
+  const studentMethod = result?.student_method ?? null;
   const betterMethod = result?.better_method ?? null;
   const comparison = result?.method_comparison ?? "";
   const hitCount = result?.points.filter((point) => point.hit).length ?? 0;
@@ -176,7 +177,25 @@ export default function ReviewPanel({
             </section>
 
             <section className="review-section review-method-wrap">
-              <h4>更优解法</h4>
+              <h4>解法点评</h4>
+              {studentMethod && (
+                <p
+                  className={`review-student-method ${
+                    studentMethod.valid
+                      ? "review-student-method-ok"
+                      : "review-student-method-bad"
+                  }`}
+                >
+                  你的解法：{studentMethod.name}（
+                  {studentMethod.valid ? "成立" : "不成立"}）
+                  {studentMethod.note && (
+                    <>
+                      {" — "}
+                      <MathText text={studentMethod.note} />
+                    </>
+                  )}
+                </p>
+              )}
               {betterMethod ? (
                 <div className="review-method">
                   {comparison && (
