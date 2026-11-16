@@ -201,7 +201,7 @@ GitHub 上「错题本 / AI 出题」类项目不少，但**对生成内容的�
 | 生成题目是否正确 | 不验证，模型说了算 | **sympy 代入验算，不通过打回重生成** |
 | 过程是否可见 | 只给结果 | 七个 Agent 实时看板，谁驳回了谁一眼可见 |
 | 没有 API Key 能否跑 | 需要 OpenAI / Gemini Key | **mock 模式零依赖跑通全链路** |
-| 交付形态 | Web 服务 / Docker | Web + 桌面版：zip 解压即用；另出 136.9 MB 单文件（首次自解压 36–48 s，不主推） |
+| 交付形态 | Web 服务 / Docker | Web + 桌面版：zip 解压即用；另出 136.8 MB 单文件（首次自解压 36–48 s，不主推） |
 | 知识沉淀 | 错题列表 | 知识点卡片 + 被问次数 + 知识谱系 |
 
 ## 评测（v0.1.5，可复现）
@@ -243,13 +243,13 @@ python scripts/e2e_smoke.py --shots ./shots       # Playwright 7 条主路径（
 | README 复现指南 | 本文件 |
 | AI 对话快照 | `docs/ai-logs/`，索引见 `docs/ai-logs/README.md` |
 | 技术文档 | `docs/技术文档.pdf`（正文 `docs/技术文档.md`） |
-| 桌面版（可选） | [Releases](https://github.com/Td12138/yizhi-chengke/releases)：`yizhi-chengke-0.1.5-win64.zip` 解压即用（推荐，约 0.2s 出窗，200.5 MB），`YizhiChengke-0.1.5-portable.exe` 单文件（136.9 MB，首次解压 36–48s） |
+| 桌面版（可选） | [Releases](https://github.com/Td12138/yizhi-chengke/releases)：`yizhi-chengke-0.1.5-win64.zip` 解压即用（推荐，约 0.2s 出窗，200.5 MB），`YizhiChengke-0.1.5-portable.exe` 单文件（136.8 MB，首次解压 36–48s） |
 | 演示视频 | 随作品在赛事平台提交，不入库 |
 
 v0.1.5 产物校验（SHA256）：
 
-- `yizhi-chengke-0.1.5-win64.zip`：`FAC8D985971D9614252859D45A4443165B5FFAC705DF84E75A07C7A5CEA41799`
-- `YizhiChengke-0.1.5-portable.exe`：`3E60BE65D9ED56FDFDC6A0E02953D8CAEB4242D4D91D1E6EE50F15B5006C17C7`
+- `yizhi-chengke-0.1.5-win64.zip`：`6E8AA01D9E645B4A1F26E7925EC5DEE3D9B3313ED7B2A3C4483DC6EAAE607278`
+- `YizhiChengke-0.1.5-portable.exe`：`5C06F8F42FCD6C0220DB1AAB6EF71909FAF2ABF86397EE6B72DF131E8CA6CAB7`
 
 ## 红线
 

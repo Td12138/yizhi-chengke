@@ -119,7 +119,7 @@ pwsh -File build/prepare_runtime.ps1 -Python "<宿主 python 路径>"
 
 | 产物 | 体积 | 说明 |
 |---|---|---|
-| `release/YizhiChengke-0.1.5-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **136.9 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
+| `release/YizhiChengke-0.1.5-portable.exe` → 交付副本 `release/一纸成课-portable.exe` | **136.8 MB** | 单文件，双击自解压到 `%TEMP%` 运行 |
 | `release/yizhi-chengke-0.1.5-win64.zip` | **200.5 MB** | `win-unpacked/` 整目录压缩，答辩现场推荐 |
 | `release/win-unpacked/一纸成课.exe` | 解压后 471.3 MB | 免安装目录版（Electron 357.2 MB + 内置 Python 111.6 MB） |
 
@@ -181,7 +181,7 @@ portable 是 NSIS 自解压：**每次双击都要把 471.3 MB 解到 `%TEMP%\<�
 | zip 完整性 | 2230 条目；`.pyc`/`__pycache__` 0；`safe_math.py`/`embedding.py`/`retrieval.py`/LICENSE/THIRD_PARTY_NOTICES 均在包 |
 | 隐私扫描 | 真实工作区/用户路径 0（上游 mpmath 文档串里的欧拉常数数字含某 5 位子串，属误报，已逐条核实；本文不复述该数字） |
 | 新接口在包 | `/api/runs/{id}/events`、`/api/cards/{id}/revisions` 路由存在；`APP_VERSION = "0.1.5"` |
-| SHA256 | zip `FAC8D985971D9614252859D45A4443165B5FFAC705DF84E75A07C7A5CEA41799`；portable `3E60BE65D9ED56FDFDC6A0E02953D8CAEB4242D4D91D1E6EE50F15B5006C17C7` |
+| SHA256 | zip `6E8AA01D9E645B4A1F26E7925EC5DEE3D9B3313ED7B2A3C4483DC6EAAE607278`；portable `5C06F8F42FCD6C0220DB1AAB6EF71909FAF2ABF86397EE6B72DF131E8CA6CAB7` |
 
 ## 已知限制
 
