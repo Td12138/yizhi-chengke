@@ -1,8 +1,12 @@
-"""检索 Agent：追问时召回卡片原文，并强制标注出处。"""
+"""检索 Agent：追问时召回卡片原文，并强制标注出处。
+
+v0.1.5：RETRIEVAL_MODE=hybrid 时走 2-gram + 向量 RRF 融合（端点故障自动回退），
+缺省 legacy 与旧版行为一致。走了哪条路径在事件里写明。
+"""
 
 from __future__ import annotations
 
-from .. import config, db
+from .. import config, db, retrieval
 from ..providers import llm
 from .base import Agent
 
@@ -27,7 +31,11 @@ class RetrieveAgent(Agent):
         query = str(self.ctx.state.get("query", "")).strip()
         await self.emit("running", f"检索卡片库：{query or '(空查询)'}")
 
-        cards = db.search_cards(query, config.RAG_TOP_K)
+        if config.RETRIEVAL_MODE == "hybrid":
+            cards, mode_note = await retrieval.hybrid_search(query, config.RAG_TOP_K)
+            await self.emit("delta", f"检索路径：{mode_note}")
+        else:
+            cards = db.search_cards(query, config.RAG_TOP_K)
         ask_total = await self._bump_ask(cards)
         message = f"召回 {len(cards)} 张卡片"
         if ask_total is not None:

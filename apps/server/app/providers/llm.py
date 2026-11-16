@@ -132,7 +132,9 @@ def _mock(task: str, payload: dict[str, Any]) -> dict[str, Any]:
         )
     if task == "answer":
         query = str(payload.get("query", ""))
-        cards = search_cards(query, config.RAG_TOP_K)
+        # 检索 Agent 已按当前模式（legacy / hybrid）召回卡片：优先用召回结果，
+        # 保证出处与检索路径一致；没带卡片时才自己查（兼容直接调 chat_json 的用法）
+        cards = payload.get("cards") or search_cards(query, config.RAG_TOP_K)
         if not cards:
             return {"answer": "材料中未涉及该问题。", "citations": []}
         head = cards[0]

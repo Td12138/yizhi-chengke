@@ -71,11 +71,26 @@ CREATE TABLE IF NOT EXISTS card_revision (
   new_value  TEXT    NOT NULL,
   created_at REAL    NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS card_embedding (
+  card_id    INTEGER PRIMARY KEY,
+  model      TEXT    NOT NULL,
+  vector     TEXT    NOT NULL,
+  updated_at REAL    NOT NULL
+);
 """
 
 
 # 演示重置要清空的表（顺序无关，外键未启用）；reset_demo / prepare_demo 共用这一份
-RESET_TABLES = ("card_revision", "agent_event", "attempt", "question", "card", "source")
+RESET_TABLES = (
+    "card_revision",
+    "card_embedding",
+    "agent_event",
+    "attempt",
+    "question",
+    "card",
+    "source",
+)
 
 
 def connect() -> sqlite3.Connection:
@@ -444,6 +459,50 @@ def search_cards(query: str, top_k: int) -> list[dict]:
 
     scored.sort(key=lambda item: item[0], reverse=True)
     return [card for _, card in scored[:top_k]]
+
+
+def get_card_embeddings(card_ids: list[int]) -> dict[int, dict]:
+    """card_id → {"model": str, "vector": list[float]}；只返回库里有的行。"""
+    if not card_ids:
+        return {}
+    placeholders = ",".join("?" for _ in card_ids)
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM card_embedding WHERE card_id IN ({placeholders})",
+            card_ids,
+        ).fetchall()
+    result: dict[int, dict] = {}
+    for row in rows:
+        try:
+            vector = json.loads(row["vector"])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(vector, list) and vector:
+            result[int(row["card_id"])] = {
+                "model": row["model"],
+                "vector": [float(value) for value in vector],
+            }
+    return result
+
+
+def save_card_embeddings(model: str, vectors: dict[int, list[float]]) -> None:
+    """upsert 卡片向量：换模型后由调用方按 model 字段判定重嵌。"""
+    if not vectors:
+        return
+    now = time.time()
+    with connect() as conn:
+        conn.executemany(
+            """INSERT INTO card_embedding (card_id, model, vector, updated_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(card_id) DO UPDATE SET
+                 model = excluded.model,
+                 vector = excluded.vector,
+                 updated_at = excluded.updated_at""",
+            [
+                (card_id, model, json.dumps(vector), now)
+                for card_id, vector in vectors.items()
+            ],
+        )
 
 
 def insert_event(

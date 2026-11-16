@@ -140,6 +140,25 @@ EVENT_PERSIST = _env_flag("EVENT_PERSIST", "true")
 # 落库事件保留最近多少个 run（按 run 最后一条事件的新旧排序）
 EVENT_PERSIST_RUNS = _env_int("EVENT_PERSIST_RUNS", 200)
 
+# ---- 检索（v0.1.5）----
+# legacy = 2-gram 字段加权（缺省，零依赖）；hybrid = 2-gram + 向量 RRF 融合。
+# hybrid 需要 OpenAI 兼容嵌入端点（EMBED_BASE_URL / EMBED_MODEL）；
+# 端点不可用时自动回退 legacy，不让追问失败。
+RETRIEVAL_MODE = os.environ.get("RETRIEVAL_MODE", "legacy").strip().lower()
+EMBED_BASE_URL = os.environ.get("EMBED_BASE_URL", "").strip()
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "").strip()
+EMBED_API_KEY = os.environ.get("EMBED_API_KEY", "").strip()
+# 嵌入请求超时（秒）：本地端点通常 <1s，给足余量
+EMBED_TIMEOUT_SECONDS = _env_int("EMBED_TIMEOUT_SECONDS", 10)
+# 一次嵌入请求最多带多少段文本
+EMBED_BATCH_SIZE = _env_int("EMBED_BATCH_SIZE", 16)
+# 卡片送嵌入的文本上限（字符）：标题+摘要+正文截断，防超长
+EMBED_MAX_CHARS = _env_int("EMBED_MAX_CHARS", 1000)
+# RRF 融合常数：标准取值 60，越大越弱化头部排名差异
+RRF_K = _env_int("RRF_K", 60)
+# hybrid 一次最多取多少张卡片参与向量排名（个人知识库规模上限）
+HYBRID_CORPUS_LIMIT = _env_int("HYBRID_CORPUS_LIMIT", 500)
+
 # ---- 可选静态托管（桌面封装用；缺省 false，Web 开发模式行为不变）----
 SERVE_WEB = _env_flag("SERVE_WEB")
 # 托管前端时给文档响应补 CSP：Electron 侧另有同名响应头（桌面外壳更早接管）
