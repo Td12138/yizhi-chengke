@@ -30,8 +30,9 @@ LEVEL_SYMBOLIC = "symbolic"
 LEVEL_STRUCTURAL = "structural"
 LEVEL_UNCHECKED = "unchecked"
 
-# 结构检查：题干最短长度（「1+1=?」这类最短合法题干也够）
-MIN_STEM_CHARS = 4
+# 结构检查：题干最短长度。只拦空/单字符的残缺题干，
+# 「解方程」这类 3 字短题干是合法题，不能误伤（审查 P2-15）。
+MIN_STEM_CHARS = 2
 # 选择题最少选项数
 MIN_OPTIONS = 2
 # 允许的题型

@@ -180,3 +180,51 @@ def test_choice_unaffected_by_sympy():
     question = {"qtype": "choice", "options": ["1", "2"], "answer": "B"}
     assert judge(question, "A") is False
     assert judge(question, "B") is True
+
+
+# ---- 审查 P1-1 回归：方程右端值不是解 ----
+
+
+@pytest.mark.parametrize(
+    "answer, given",
+    [
+        ("x/2=2", "2"),  # 解是 4，右端 2 不能判对
+        ("x^2=4", "4"),  # 解是 ±2
+        ("2x=4", "4"),  # 解是 2
+        ("x+1=5", "5"),  # 解是 4
+    ],
+)
+def test_equation_rhs_literal_is_not_the_solution(answer, given):
+    assert judge({"qtype": "fill", "answer": answer}, given) is False
+
+
+@pytest.mark.parametrize(
+    "answer, given",
+    [
+        ("x/2=2", "4"),
+        ("x^2=4", "2"),
+        ("x^2=4", "-2"),
+        ("x=2", "2"),  # 演示路径回归：代入验证通过
+        ("x=2", "2.0"),
+    ],
+)
+def test_equation_actual_solution_accepted(answer, given):
+    assert judge({"qtype": "fill", "answer": answer}, given) is True
+
+
+def test_expression_equal_to_one_side_of_identity_accepted():
+    # 学生写了恒等式的一侧（去掉 y=）仍算对
+    assert judge(
+        {"qtype": "fill", "answer": r"$y = (x-2)^{2} - 1$"}, "(x-2)^2-1"
+    ) is True
+    # 但 x=2 与 x-2 既不是解也不是端，判错
+    assert judge({"qtype": "fill", "answer": "x=2"}, "x-2") is False
+
+
+def test_big_power_skips_sympy_quickly():
+    # (x+1)^1000 的等价化简会秒级阻塞：判分路径指数上限直接退回（审查 P2-14）
+    import time
+
+    started = time.monotonic()
+    assert judge({"qtype": "fill", "answer": "(x+1)^1000"}, "0") is False
+    assert time.monotonic() - started < 1.0

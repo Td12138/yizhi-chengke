@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS card_embedding (
   vector     TEXT    NOT NULL,
   updated_at REAL    NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_agent_event_run ON agent_event (run_id);
 """
 
 
@@ -461,16 +463,25 @@ def search_cards(query: str, top_k: int) -> list[dict]:
     return [card for _, card in scored[:top_k]]
 
 
+# SQLite 单条 SQL 变量上限 999：IN 查询按此分块
+SQL_IN_CHUNK = 900
+
+
 def get_card_embeddings(card_ids: list[int]) -> dict[int, dict]:
     """card_id → {"model": str, "vector": list[float]}；只返回库里有的行。"""
     if not card_ids:
         return {}
-    placeholders = ",".join("?" for _ in card_ids)
+    rows = []
     with connect() as conn:
-        rows = conn.execute(
-            f"SELECT * FROM card_embedding WHERE card_id IN ({placeholders})",
-            card_ids,
-        ).fetchall()
+        for start in range(0, len(card_ids), SQL_IN_CHUNK):
+            chunk = card_ids[start : start + SQL_IN_CHUNK]
+            placeholders = ",".join("?" for _ in chunk)
+            rows.extend(
+                conn.execute(
+                    f"SELECT * FROM card_embedding WHERE card_id IN ({placeholders})",
+                    chunk,
+                ).fetchall()
+            )
     result: dict[int, dict] = {}
     for row in rows:
         try:
@@ -555,7 +566,10 @@ def list_events(run_id: str) -> list[dict]:
 
 
 def prune_events(keep_runs: int) -> None:
-    """只保留最近 keep_runs 个 run 的事件，防止 agent_event 无限增长。"""
+    """只保留最近 keep_runs 个 run 的事件，防止 agent_event 无限增长。
+
+    keep_runs <= 0 表示不清理（无限保留），由调用方自行承担增长。
+    """
     if keep_runs <= 0:
         return
     with connect() as conn:

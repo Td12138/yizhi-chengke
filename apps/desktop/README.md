@@ -177,9 +177,9 @@ portable 是 NSIS 自解压：**每次双击都要把 471.3 MB 解到 `%TEMP%\<�
 
 | 项 | 结果 |
 |---|---|
-| 打包版端到端冒烟（`scripts/e2e_smoke.py` 的 7 条路径对包内运行时跑） | **7/7 通过**：上传→卡片、出题→质检回环→徽章、答错→讲解、追问→出处、批改→分步、修正→留痕刷新不丢、事件落库回放 |
+| 打包版端到端冒烟（启动 `win-unpacked/一纸成课.exe`，复用 `e2e_smoke.py` 的 7 条路径断言驱动包内服务） | **7/7 通过**：上传→卡片、出题→质检回环→徽章、答错→讲解、追问→出处、批改→分步、修正→留痕刷新不丢、事件落库回放；截图归档工作区 `temp/yizhi-packaged-shots/` |
 | zip 完整性 | 2230 条目；`.pyc`/`__pycache__` 0；`safe_math.py`/`embedding.py`/`retrieval.py`/LICENSE/THIRD_PARTY_NOTICES 均在包 |
-| 隐私扫描 | 真实工作区/用户路径 0（mpmath 文档串里的欧拉常数数字 0.57721566490**15328**… 为子串误报，已逐条核实） |
+| 隐私扫描 | 真实工作区/用户路径 0（上游 mpmath 文档串里的欧拉常数数字含某 5 位子串，属误报，已逐条核实；本文不复述该数字） |
 | 新接口在包 | `/api/runs/{id}/events`、`/api/cards/{id}/revisions` 路由存在；`APP_VERSION = "0.1.5"` |
 | SHA256 | zip `FAC8D985971D9614252859D45A4443165B5FFAC705DF84E75A07C7A5CEA41799`；portable `3E60BE65D9ED56FDFDC6A0E02953D8CAEB4242D4D91D1E6EE50F15B5006C17C7` |
 
@@ -189,7 +189,7 @@ portable 是 NSIS 自解压：**每次双击都要把 471.3 MB 解到 `%TEMP%\<�
 - **杀软误报**：单文件自解压 + 未签名 exe 容易被 360/火绒/Defender 拦。兜底方案是解压 `yizhi-chengke-0.1.5-win64.zip` 直接运行目录版；不要为此关杀软。未做代码签名（时间与证书限制）。
 - **端口占用**：8710/8711/8712 全被占时启动失败并提示端口；需要先关掉占用程序。
 - **不做自动更新、不做签名**。
-- **打包版不读仓库 `.env`**：如需切真实模型，在启动前设置同名环境变量（`VLM_PROVIDER` 等），或后续版本再补设置界面。
+- **打包版不读仓库 `.env`**：如需切真实模型或回退 v0.1.5 新行为，在启动前设置同名环境变量（`VLM_PROVIDER`、`VERIFY_STRUCTURE_CHECK=0`、`JUDGE_SYMPY_EQUIV=0`、`EVENT_PERSIST=0`、`RETRIEVAL_MODE=legacy` 等），或后续版本再补设置界面。
 - **模型 key 不入库**：仓库与产物中都不含任何密钥。
 - 只出 x64；Windows 10/11。内置 Python 自带 VC 运行库，无需另装 Python。
 - 本机构建产物未做代码签名，SmartScreen 首次运行会提示「更多信息 → 仍要运行」。

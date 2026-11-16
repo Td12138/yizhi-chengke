@@ -71,6 +71,17 @@ def spawn(coro) -> None:
 async def lifespan(app: FastAPI):
     config.ensure_dirs()
     db.init_db()
+    # 启动日志打印生效配置（脱敏：只打开关与模式，不打密钥/地址），排障一眼看出走哪条路径
+    logger.info(
+        "生效配置 v%s：VLM=%s LLM=%s 结构检查=%s 等价判分=%s 事件落库=%s 检索=%s",
+        APP_VERSION,
+        config.VLM_PROVIDER,
+        config.LLM_PROVIDER,
+        config.VERIFY_STRUCTURE_CHECK,
+        config.JUDGE_SYMPY_EQUIV,
+        config.EVENT_PERSIST,
+        config.RETRIEVAL_MODE,
+    )
     yield
 
 

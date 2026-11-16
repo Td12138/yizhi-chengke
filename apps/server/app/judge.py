@@ -165,15 +165,36 @@ def _parse_side(text: str) -> sp.Expr | None:
         return None
 
 
-def _equation_side(text: str) -> tuple[sp.Expr | None, bool]:
-    """有等号取最后一个等号两侧之差（移项），无等号直接解析。"""
+def _equation_side(text: str) -> tuple[sp.Expr | None, bool, sp.Expr | None, sp.Expr | None]:
+    """有等号取最后一个等号两侧之差（移项），无等号直接解析。
+
+    返回 (差式, 是否方程, 左式, 右式)；解析失败差式为 None。
+    保留左右式是为了「学生写了恒等式的一侧」这类合法作答。
+    """
     if "=" in text:
         lhs, rhs = text.rsplit("=", 1)
         left, right = _parse_side(lhs), _parse_side(rhs)
         if left is None or right is None:
-            return None, True
-        return left - right, True
-    return _parse_side(text), False
+            return None, True, None, None
+        return left - right, True, left, right
+    expr = _parse_side(text)
+    return expr, False, expr, None
+
+
+# 判分路径的幂指数上限：simplify 会展开高次幂，(x+1)^1000 这类输入
+# 虽然过了 safe_math（数值代入很快），但等价化简可能秒级阻塞事件循环。
+# 正常答案的指数远小于此；超限直接退回字符串规则（判不等价）。
+MAX_JUDGE_POW_EXPONENT = 20
+
+
+def _has_big_power(expr: sp.Expr) -> bool:
+    for power in expr.atoms(sp.Pow):
+        try:
+            if abs(float(power.exp)) > MAX_JUDGE_POW_EXPONENT:
+                return True
+        except (TypeError, ValueError):
+            return True
+    return False
 
 
 def sympy_equivalent(answer: str, given: str) -> bool:
@@ -182,22 +203,26 @@ def sympy_equivalent(answer: str, given: str) -> bool:
     只在字符串/数值比对失败后调用；任何解析/化简异常都按「不等价」处理，
     判分结果不会比旧规则更宽松地出错——白名单外的输入根本进不了 sympy。
     """
-    left, left_is_eq = _equation_side(latex_to_plain(answer))
-    right, right_is_eq = _equation_side(latex_to_plain(given))
+    left, left_is_eq, left_l, left_r = _equation_side(latex_to_plain(answer))
+    right, right_is_eq, right_l, right_r = _equation_side(latex_to_plain(given))
     if left is None or right is None:
+        return False
+    if _has_big_power(left) or _has_big_power(right):
         return False
     try:
         if left_is_eq != right_is_eq:
-            # 一侧是方程、一侧是纯数：把数代入方程验证（x=2 与 4/2）。
-            # 纯表达式（含变量）不算方程的解：x=2 与 x-2 不能判等。
-            expr_side, num_side = (left, right) if left_is_eq else (right, left)
-            if num_side.free_symbols:
-                return False
-            variables = expr_side.free_symbols
-            if len(variables) != 1:
-                return False
-            (var,) = variables
-            return sp.simplify(expr_side.subs(var, num_side)) == 0
+            # 一侧是方程、一侧是表达式：纯数代入方程验证（x=2 与 4/2）；
+            # 含变量表达式必须等于方程的某一端（写了恒等式的一侧），
+            # x=2 与 x-2 这类「不是解也不是端」的写法判不等价。
+            eq_diff, expr = (left, right) if left_is_eq else (right, left)
+            eq_l, eq_r = (left_l, left_r) if left_is_eq else (right_l, right_r)
+            if not expr.free_symbols:
+                variables = eq_diff.free_symbols
+                if len(variables) != 1:
+                    return False
+                (var,) = variables
+                return sp.simplify(eq_diff.subs(var, expr)) == 0
+            return sp.simplify(expr - eq_r) == 0 or sp.simplify(expr - eq_l) == 0
         if sp.simplify(left - right) == 0:
             return True
         # x - 2 与 2 - x 解集相同：两侧都是方程时允许反号
@@ -217,18 +242,18 @@ def judge(question: dict, user_answer: str) -> bool:
     if not expected or not given:
         return False
     if config.JUDGE_SYMPY_EQUIV:
-        # 两侧都是方程时不做「右端值」交叉比对：x=2 与 y=2 右端同为 2 但不是同一答案
-        both_equations = "=" in expected and "=" in given
-        forms_match = (
-            same_value(expected, given)
-            if both_equations
-            else any(
-                same_value(expect_form, given_form)
-                for expect_form in answer_forms(expected)
-                for given_form in answer_forms(given)
-            )
-        )
-        if forms_match:
+        # 任一侧是方程时不做「右端值」交叉比对：x/2=2 的右端是 2 但解是 4，
+        # 字面等于右端不能判对，一律走 sympy_equivalent 的代入/端点验证。
+        # x=2 与只填 2 仍判对（代入验证通过），演示路径不受影响。
+        if "=" in expected or "=" in given:
+            if same_value(expected, given):
+                return True
+            return sympy_equivalent(question.get("answer", ""), user_answer)
+        if any(
+            same_value(expect_form, given_form)
+            for expect_form in answer_forms(expected)
+            for given_form in answer_forms(given)
+        ):
             return True
         return sympy_equivalent(question.get("answer", ""), user_answer)
     return any(

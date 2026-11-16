@@ -19,6 +19,7 @@ import argparse
 import glob
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -57,9 +58,22 @@ def _api(port: int, path: str, body: dict | None = None) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def _wait_health(port: int) -> None:
+def _port_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind((HOST, port))
+            return True
+        except OSError:
+            return False
+
+
+def _wait_health(port: int, server: subprocess.Popen) -> None:
     deadline = time.time() + HEALTH_TIMEOUT_SECONDS
     while time.time() < deadline:
+        if server.poll() is not None:
+            raise RuntimeError(
+                f"后端进程提前退出（code={server.returncode}），端口可能被占用或依赖缺失"
+            )
         try:
             health = _api(port, "/api/health")
             if health.get("ready"):
@@ -210,6 +224,15 @@ def main(argv: list[str] | None = None) -> int:
         print("缺前端产物：先在 apps/web 执行 npm run build", file=sys.stderr)
         return 2
 
+    # 端口被占就退出：绝不能连上「别人的服务」跑写入用例（会污染真实 data/）
+    if not _port_free(args.port):
+        print(
+            f"端口 {args.port} 已被占用：请先停掉该服务或换 --port，"
+            "冒烟不会驱动非本脚本启动的服务",
+            file=sys.stderr,
+        )
+        return 2
+
     from playwright.sync_api import sync_playwright
 
     with tempfile.TemporaryDirectory(prefix="yizhi-e2e-", ignore_cleanup_errors=True) as tmp:
@@ -238,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             stderr=subprocess.DEVNULL,
         )
         try:
-            _wait_health(args.port)
+            _wait_health(args.port, server)
             with sync_playwright() as pw:
                 launch_kwargs: dict = {"headless": True}
                 try:

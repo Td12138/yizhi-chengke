@@ -252,7 +252,7 @@
             "判别式与零点个数"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 10 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 10 张）"
         },
         {
           "query": "怎么求抛物线的对称轴",
@@ -265,7 +265,7 @@
             "诱导公式"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "配方法有什么用",
@@ -278,7 +278,7 @@
             "根与系数的关系"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "抛物线和 x 轴交点个数怎么判断",
@@ -291,7 +291,7 @@
             "求根公式"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "Δ 大于 0 说明什么",
@@ -305,7 +305,7 @@
             "判别式与零点个数"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "方程的根怎么直接算出来",
@@ -318,7 +318,7 @@
             "因式分解法"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "什么时候方程有两个相等实根",
@@ -331,7 +331,7 @@
             "根与系数的关系"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "十字相乘适合什么方程",
@@ -344,7 +344,7 @@
             "根与系数的关系"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "不解方程求两根之和",
@@ -357,7 +357,7 @@
             "因式分解法"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "韦达定理怎么用",
@@ -370,7 +370,7 @@
             "诱导公式"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "sin(pi+α) 怎么化简",
@@ -383,7 +383,7 @@
             "诱导公式"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "奇变偶不变是什么意思",
@@ -396,7 +396,7 @@
             "顶点式与对称轴"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "正弦函数的最小正周期",
@@ -409,7 +409,7 @@
             "二次函数的一般式"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "ω 对周期有什么影响",
@@ -422,7 +422,7 @@
             "判别式与零点个数"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "sin(α+β) 展开式",
@@ -435,7 +435,7 @@
             "求根公式"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "正余余正口诀对应哪个公式",
@@ -448,7 +448,7 @@
             "求根公式"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "把一般式化成顶点式的关键步骤",
@@ -461,7 +461,7 @@
             "根与系数的关系"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "how to find the vertex of a parabola",
@@ -474,7 +474,7 @@
             "二次函数的一般式"
           ],
           "hit": false,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "quadratic formula for roots",
@@ -487,7 +487,7 @@
             "因式分解法"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         },
         {
           "query": "sine period and amplitude",
@@ -500,7 +500,7 @@
             "诱导公式"
           ],
           "hit": true,
-          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张（新嵌入 0 张）"
+          "note": "hybrid（2-gram + 向量 RRF）：向量路 10 张过阈值（新嵌入 0 张）"
         }
       ]
     }

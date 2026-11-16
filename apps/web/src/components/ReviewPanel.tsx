@@ -218,7 +218,9 @@ export default function ReviewPanel({
                   )}
                 </div>
               ) : (
-                <p className="review-method-none">你的解法即为推荐解法</p>
+                !studentMethod && (
+                  <p className="review-method-none">你的解法即为推荐解法</p>
+                )
               )}
             </section>
 

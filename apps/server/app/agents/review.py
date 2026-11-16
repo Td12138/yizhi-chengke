@@ -208,6 +208,13 @@ def _as_better_method(value: Any) -> dict | None:
     return {"name": name, "why": str(value.get("why") or "").strip(), "steps": steps}
 
 
+def _as_bool(value: Any) -> bool:
+    """模型可能把布尔写成字符串：\"false\"/\"0\"/\"否\"/\"不成立\" 一律归一为 False。"""
+    if isinstance(value, str):
+        return value.strip().lower() not in {"false", "0", "no", "否", "不成立"}
+    return bool(value)
+
+
 def _as_student_method(value: Any) -> dict | None:
     """方法归因（仅真实 provider 会给出）：没有方法名就视为没有归因。
 
@@ -220,7 +227,7 @@ def _as_student_method(value: Any) -> dict | None:
         return None
     return {
         "name": name,
-        "valid": bool(value.get("valid")),
+        "valid": _as_bool(value.get("valid")),
         "note": str(value.get("note") or "").strip(),
     }
 

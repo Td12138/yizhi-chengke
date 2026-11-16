@@ -537,6 +537,33 @@ def test_coerce_review_rejects_malformed_student_method(raw_method):
     assert result["student_method"] is None
 
 
+@pytest.mark.parametrize(
+    "raw_valid, expected",
+    [
+        (True, True),
+        (False, False),
+        ("false", False),
+        ("False", False),
+        ("0", False),
+        ("否", False),
+        ("不成立", False),
+        ("true", True),
+        ("成立", True),
+        (1, True),
+        (0, False),
+    ],
+)
+def test_student_method_valid_normalizes_string_booleans(raw_valid, expected):
+    """审查 P2-12：模型把布尔写成字符串时不能把 \"false\" 当 True。"""
+    from app.agents.review import coerce_review
+
+    result = coerce_review(
+        {"score": 50, "student_method": {"name": "公式法", "valid": raw_valid}},
+        AXIS_Q,
+    )
+    assert result["student_method"]["valid"] is expected
+
+
 def test_mock_review_never_claims_method_attribution():
     """mock 只做字面比对：能力边界不变，student_method 恒为 None。"""
     result = _result(_review_events(SQUARE_Q, "先配方：y=(x-2)^2-1"))

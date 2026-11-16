@@ -214,3 +214,51 @@ def test_cosine_zero_vector_is_zero():
     assert embedding.cosine([0.0, 0.0], [1.0, 0.0]) == 0.0
     assert embedding.cosine([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
     assert embedding.cosine([1.0], [1.0, 0.0]) == 0.0
+
+
+# ---- 审查 P1-2 回归：hybrid 不硬凑出处 ----
+
+
+def test_hybrid_orthogonal_query_returns_empty(monkeypatch):
+    """查询与所有卡片向量正交（余弦 0）：两路都空 → 返回空，保住出处下限。"""
+    _seed_all_cards()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        # 查询给 [0,0,0,1]（与所有卡片三维向量正交），卡片给各自主题向量
+        data = []
+        for index, text in enumerate(body["input"]):
+            if index == 0 and "无关" in text:
+                vector = [0.0, 0.0, 0.0, 1.0]
+            else:
+                vector = _fake_vector(text) + [0.0]
+            data.append({"index": index, "embedding": vector})
+        return httpx.Response(200, json={"data": data})
+
+    monkeypatch.setattr(
+        embedding,
+        "_http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    monkeypatch.setattr(config, "RETRIEVAL_MODE", "hybrid")
+    monkeypatch.setattr(config, "EMBED_BASE_URL", "http://fake-embed/v1")
+    monkeypatch.setattr(config, "EMBED_MODEL", "test-model")
+
+    cards, note = asyncio.run(retrieval.hybrid_search("完全无关的问题", 3))
+    assert cards == []
+    assert "hybrid" in note
+
+
+def test_hybrid_falls_back_on_cache_db_error(monkeypatch):
+    """向量缓存读写抛 sqlite 错：整路回退 legacy，追问不中断（审查 P2-10）。"""
+    _seed_all_cards()
+    _install_fake_endpoint(monkeypatch)
+
+    def broken_get(*_args, **_kwargs):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(db, "get_card_embeddings", broken_get)
+    legacy = db.search_cards("为什么这里要配方？", 3)
+    cards, note = asyncio.run(retrieval.hybrid_search("为什么这里要配方？", 3))
+    assert [c["id"] for c in cards] == [c["id"] for c in legacy]
+    assert "回退" in note

@@ -175,6 +175,14 @@ def test_structural_check_accepts_complete_fill():
     assert "结构检查通过" in detail
 
 
+def test_structural_check_accepts_short_valid_stem():
+    """「解方程」3 字题干合法，结构检查只拦空/单字符（审查 P2-15）。"""
+    passed, _ = structural_check(
+        {"stem_latex": "解方程", "qtype": "fill", "answer": "x=2"}
+    )
+    assert passed is True
+
+
 def test_structural_check_accepts_choice_letter_in_range():
     passed, _ = structural_check(
         {
@@ -203,7 +211,7 @@ def test_structural_check_accepts_choice_answer_as_option_text():
     "question, reason",
     [
         ({"stem_latex": "", "answer": "2"}, "题干为空或过短"),
-        ({"stem_latex": "1+1", "answer": "2"}, "题干为空或过短"),
+        ({"stem_latex": "1", "answer": "2"}, "题干为空或过短"),
         ({"stem_latex": "1 + 1 = ?", "answer": ""}, "答案为空"),
         ({"stem_latex": "1 + 1 = ?", "answer": "2", "qtype": "proof"}, "未知题型"),
         (

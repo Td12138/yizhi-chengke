@@ -14,6 +14,11 @@ from __future__ import annotations
 
 from . import config, db, embedding
 
+# 向量路相似度下限：低于此值视为无关，不进 RRF——保住 legacy 的
+# 「没有可信命中就返回空、不硬凑出处」设计（db.py:MIN_SCORE 的向量侧对应物）。
+# 取值依据：BGE-M3 归一化向量下，同主题问句实测 ≥0.5，无关问句 ≤0.3。
+VECTOR_MIN_COSINE = 0.35
+
 
 def card_text(card: dict) -> str:
     """送嵌入的文本：标题 + 摘要 + 正文，截断到上限。"""
@@ -64,9 +69,10 @@ async def _vector_ranking(
         if entry is None:
             continue
         score = embedding.cosine(query_vector, entry["vector"])
-        scored.append((score, card["id"]))
+        if score >= VECTOR_MIN_COSINE:
+            scored.append((score, card["id"]))
     scored.sort(key=lambda item: item[0], reverse=True)
-    note = f"向量路 {len(scored)} 张（新嵌入 {len(missing)} 张）"
+    note = f"向量路 {len(scored)} 张过阈值（新嵌入 {len(missing)} 张）"
     return [card_id for _, card_id in scored], note
 
 
@@ -81,12 +87,14 @@ async def hybrid_search(query: str, top_k: int) -> tuple[list[dict], str]:
         return legacy, "legacy（2-gram）：卡片库为空"
     try:
         vector_ids, vector_note = await _vector_ranking(query, cards)
-    except embedding.EmbeddingError as exc:
-        return legacy, f"legacy（2-gram）：嵌入不可用已回退（{exc}）"
+    except Exception as exc:
+        # 嵌入端点、向量缓存读写任何故障都回退 legacy，追问主流程不中断
+        return legacy, f"legacy（2-gram）：向量路不可用已回退（{type(exc).__name__}: {exc}）"
 
     legacy_ids = [card["id"] for card in legacy]
     fused = rrf_fuse([legacy_ids, vector_ids])
     by_id = {card["id"]: card for card in cards}
-    result = [by_id[card_id] for card_id in fused[:top_k] if card_id in by_id]
+    # 先过滤再截断：语料上限外的 legacy 命中不能凭空消失
+    result = [by_id[card_id] for card_id in fused if card_id in by_id][:top_k]
     note = f"hybrid（2-gram + 向量 RRF）：{vector_note}"
     return result, note
