@@ -1,7 +1,14 @@
-"""判分：归一化要能吃掉 LaTeX 记号、空白与中文标点；choice 只看选项字母。"""
+"""判分：归一化要能吃掉 LaTeX 记号、空白与中文标点；choice 只看选项字母。
+
+v0.1.5 追加 sympy 等价判定：代数等价式、反写方程、分数小数互化。
+"""
 
 from __future__ import annotations
 
+import pytest
+
+from app import config
+from app.judge import latex_to_plain, sympy_equivalent
 from app.orchestrator import judge, normalize
 
 
@@ -107,3 +114,69 @@ def test_choice_rejects_empty_or_missing_answer():
 def test_fill_by_default_when_qtype_missing():
     question = {"answer": "2"}
     assert judge(question, "2") is True
+
+
+# ---- sympy 等价判定（v0.1.5）----
+
+
+@pytest.mark.parametrize(
+    "answer, given",
+    [
+        (r"$x = 2$", "2 = x"),  # 反写方程
+        (r"$(x-2)(x-3)$", "x^2 - 5x + 6"),  # 因式分解 ↔ 展开
+        (r"$x^{2} - 5x + 6$", "(x-2)(x-3)"),
+        (r"$\dfrac{1}{2}$", "0.5"),  # 分数 ↔ 小数
+        (r"$\frac{4}{2}$", "2"),
+        (r"$x + 1$", "1 + x"),
+        (r"$2x$", "x + x"),
+        (r"$\sqrt{4}$", "2"),
+        (r"$y = (x-2)^{2} - 1$", "y = x^2 - 4x + 3"),
+        (r"$x = 2$", r"\frac{4}{2}"),  # 方程 ↔ 纯数（代入验证）
+        (r"$\sin(\pi/6)$", "0.5"),
+    ],
+)
+def test_sympy_equivalent_forms(answer, given):
+    assert judge({"qtype": "fill", "answer": answer}, given) is True
+
+
+@pytest.mark.parametrize(
+    "answer, given",
+    [
+        (r"$x = 2$", "x = 3"),
+        (r"$x = 2$", "x - 2"),  # 表达式不是方程的解
+        (r"$x + 1$", "x + 2"),
+        (r"$(x-2)(x-3)$", "x^2 - 5x + 5"),
+        (r"$x = 2$", "y = 2"),  # 变量不同
+        (r"$\alpha$", "a"),  # 未知 LaTeX 命令不删、不误判
+    ],
+)
+def test_sympy_still_rejects_wrong_answers(answer, given):
+    assert judge({"qtype": "fill", "answer": answer}, given) is False
+
+
+def test_sympy_path_never_crashes_on_garbage():
+    for garbage in ("__import__('os')", "x**", "((2**1000)**1000)**1000", "💥", ""):
+        assert judge({"qtype": "fill", "answer": "2"}, garbage) is False
+        assert sympy_equivalent("2", garbage) is False
+
+
+def test_judge_sympy_switch_off_restores_legacy(monkeypatch):
+    monkeypatch.setattr(config, "JUDGE_SYMPY_EQUIV", False)
+    # 旧规则判不了的等价式，关开关后必须仍判错（逐字节回退）
+    assert judge({"qtype": "fill", "answer": r"$(x-2)(x-3)$"}, "x^2-5x+6") is False
+    assert judge({"qtype": "fill", "answer": r"$x = 2$"}, "2=x") is False
+    # 旧规则本来就判对的保持不变
+    assert judge({"qtype": "fill", "answer": r"$x = 2$"}, "2") is True
+
+
+def test_latex_to_plain_keeps_unknown_commands():
+    assert latex_to_plain(r"$\alpha + 1$") == r"\alpha + 1"
+    assert latex_to_plain(r"\dfrac{-4}{2}") == "((-4)/(2))"
+    assert latex_to_plain(r"$x^{2}$") == "x^(2)"
+    assert latex_to_plain(r"\left( x \right)") == "( x )"
+
+
+def test_choice_unaffected_by_sympy():
+    question = {"qtype": "choice", "options": ["1", "2"], "answer": "B"}
+    assert judge(question, "A") is False
+    assert judge(question, "B") is True

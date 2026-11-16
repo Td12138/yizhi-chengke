@@ -133,6 +133,8 @@ def _env_flag(name: str, default: str = "false") -> bool:
 # ---- 质检与判分开关（v0.1.5；关掉即回退旧行为）----
 # 无 verify 的题做结构检查（题干/答案/题型）；设 0 回退「直接放行」的旧行为
 VERIFY_STRUCTURE_CHECK = _env_flag("VERIFY_STRUCTURE_CHECK", "true")
+# 填空判分在字符串/数值比对失败后追加 sympy 等价判定；设 0 回退纯字符串规则
+JUDGE_SYMPY_EQUIV = _env_flag("JUDGE_SYMPY_EQUIV", "true")
 
 # ---- 可选静态托管（桌面封装用；缺省 false，Web 开发模式行为不变）----
 SERVE_WEB = _env_flag("SERVE_WEB")
