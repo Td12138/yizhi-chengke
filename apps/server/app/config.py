@@ -130,6 +130,10 @@ def _env_flag(name: str, default: str = "false") -> bool:
     }
 
 
+# ---- 质检与判分开关（v0.1.5；关掉即回退旧行为）----
+# 无 verify 的题做结构检查（题干/答案/题型）；设 0 回退「直接放行」的旧行为
+VERIFY_STRUCTURE_CHECK = _env_flag("VERIFY_STRUCTURE_CHECK", "true")
+
 # ---- 可选静态托管（桌面封装用；缺省 false，Web 开发模式行为不变）----
 SERVE_WEB = _env_flag("SERVE_WEB")
 # 托管前端时给文档响应补 CSP：Electron 侧另有同名响应头（桌面外壳更早接管）

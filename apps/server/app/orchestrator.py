@@ -218,12 +218,17 @@ class Orchestrator:
             message = f"交付 {len(delivered)} 道题"
             if dropped:
                 message += f"，丢弃 {dropped} 道未通过质检"
+            # 验算级别分布（symbolic / structural / unchecked）：只进 payload，不改文案
+            levels: dict[str, int] = {}
+            for question in delivered:
+                level = str(question.get("verify_level") or "")
+                levels[level] = levels.get(level, 0) + 1
             await self._emit(
                 run_id,
                 "orchestrator",
                 "done",
                 message,
-                result={"questions": delivered, "dropped": dropped},
+                result={"questions": delivered, "dropped": dropped, "levels": levels},
             )
         except Exception as exc:
             await self._fail(run_id, exc)

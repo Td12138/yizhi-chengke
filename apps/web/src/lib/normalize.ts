@@ -45,6 +45,7 @@ export function normalizeStreamedQuestion(raw: any, tempId: number): Question {
     difficulty: String(raw?.difficulty ?? ""),
     verified: Number(raw?.verified ?? 0) || 0,
     verify_log: String(raw?.verify_log ?? ""),
+    verify_level: String(raw?.verify_level ?? ""),
   };
 }
 

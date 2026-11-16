@@ -40,6 +40,8 @@ export interface Question {
   difficulty: string;
   verified: number;
   verify_log: string;
+  /** 验算级别：symbolic 符号验算 / structural 结构检查 / unchecked 未验算；旧后端为空串 */
+  verify_level: string;
 }
 
 /** AI 批改的逐点判定：hit = true 表示用户答到了这个要点 */

@@ -92,10 +92,16 @@ SOURCE_EXTRA_COLUMNS = {
     "renamed_at": "REAL",
 }
 
+# v0.1.5 验算级别：symbolic / structural / unchecked；老数据为空串，UI 按 verified 回退显示
+QUESTION_EXTRA_COLUMNS = {
+    "verify_level": "TEXT NOT NULL DEFAULT ''",
+}
+
 # 表名 → 后加列；加新列只改这张表，迁移逻辑不用动
 EXTRA_COLUMNS = {
     "card": CARD_EXTRA_COLUMNS,
     "source": SOURCE_EXTRA_COLUMNS,
+    "question": QUESTION_EXTRA_COLUMNS,
 }
 
 
@@ -268,8 +274,8 @@ def insert_questions(questions: list[dict]) -> list[int]:
             cur = conn.execute(
                 """INSERT INTO question
                    (card_ids, stem_latex, qtype, options, answer, solution,
-                    difficulty, verified, verify_log, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    difficulty, verified, verify_log, verify_level, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     json.dumps(q.get("card_ids", []), ensure_ascii=False),
                     q.get("stem_latex", ""),
@@ -280,6 +286,7 @@ def insert_questions(questions: list[dict]) -> list[int]:
                     q.get("difficulty", "medium"),
                     1 if q.get("verified") else 0,
                     q.get("verify_log", ""),
+                    q.get("verify_level", ""),
                     time.time(),
                 ),
             )

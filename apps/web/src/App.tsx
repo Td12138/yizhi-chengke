@@ -118,6 +118,44 @@ const DIFFICULTY_LABEL: Record<string, string> = {
   hard: "拔高",
 };
 
+/** 验算徽章按级别如实显示：结构检查通过 ≠ 符号验算通过（v0.1.5 三级语义） */
+function verifyBadge(question: Question): { text: string; ok: boolean; title: string } {
+  if (!question.verified) {
+    return { text: "! 未验算", ok: false, title: question.verify_log || "未通过质检" };
+  }
+  if (question.verify_level === "structural") {
+    return {
+      text: "✓ 结构检查",
+      ok: true,
+      title: "无可验算表达式，已通过题干、答案与题型结构检查",
+    };
+  }
+  if (question.verify_level === "unchecked") {
+    return {
+      text: "! 未验算",
+      ok: false,
+      title: "无可验算表达式，且结构检查开关已关闭",
+    };
+  }
+  return { text: "✓ 已验算", ok: true, title: "sympy 代入验算通过" };
+}
+
+/** 验算汇总：全过时按级别拆分文案，避免把结构检查说成符号验算 */
+function verifySummary(questions: Question[]): string {
+  const verified = questions.filter((question) => question.verified);
+  if (verified.length < questions.length) {
+    return `${verified.length} 题通过验算`;
+  }
+  const structural = verified.filter((q) => q.verify_level === "structural").length;
+  const unchecked = verified.filter((q) => q.verify_level === "unchecked").length;
+  const symbolic = verified.length - structural - unchecked;
+  if (!structural && !unchecked) return "全部通过符号验算";
+  const parts = [`${symbolic} 题符号验算`];
+  if (structural) parts.push(`${structural} 题结构检查`);
+  if (unchecked) parts.push(`${unchecked} 题未验算`);
+  return parts.join(" · ");
+}
+
 /** 难度 → 色彩修饰类（未收录的难度不加上色，保持默认灰胶囊） */
 const DIFFICULTY_CLASS: Record<string, string> = {
   easy: "tag-diff-easy",
@@ -1295,11 +1333,7 @@ export default function App() {
               <div className="verify-summary">
                 <span className="vs-item">{questions.length} 题</span>
                 <span className="vs-sep">·</span>
-                <span className="vs-item vs-ok">
-                  {questions.every((question) => question.verified)
-                    ? "全部通过符号验算"
-                    : `${questions.filter((question) => question.verified).length} 题通过验算`}
-                </span>
+                <span className="vs-item vs-ok">{verifySummary(questions)}</span>
                 {verifyRejects > 0 && (
                   <>
                     <span className="vs-sep">·</span>
@@ -1309,7 +1343,7 @@ export default function App() {
                   </>
                 )}
                 <span className="vs-note">
-                  验算由 sympy 代入完成，未通过的题不会出现在这里
+                  符号验算由 sympy 代入完成；无验算式的题做结构检查。未通过的题不会出现在这里
                 </span>
               </div>
             )}
@@ -1324,6 +1358,7 @@ export default function App() {
               const diffKey = rawDifficulty.toLowerCase();
               const diffLabel = DIFFICULTY_LABEL[diffKey] ?? (rawDifficulty || "难度待定");
               const diffClass = DIFFICULTY_CLASS[diffKey] ?? "";
+              const badge = verifyBadge(question);
               return (
                 <article
                   key={question.id}
@@ -1346,9 +1381,10 @@ export default function App() {
                       <span className={`tag ${diffClass}`}>{diffLabel}</span>
                       {ready ? (
                         <span
-                          className={`tag ${question.verified ? "tag-ok" : "tag-warn"}`}
+                          className={`tag ${badge.ok ? "tag-ok" : "tag-warn"}`}
+                          title={badge.title}
                         >
-                          {question.verified ? "✓ 已验算" : "! 未验算"}
+                          {badge.text}
                         </span>
                       ) : (
                         <span className="tag tag-pending">待验算</span>
