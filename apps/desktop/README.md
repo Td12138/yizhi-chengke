@@ -170,7 +170,7 @@ portable 是 NSIS 自解压：**每次双击都要把 471.3 MB 解到 `%TEMP%\<�
 | 摄像头（假设备，打包版） | `getUserMedia` 返回 `fake_device_0`；点「打开摄像头」后 `video.readyState=4`、`paused=false`、无错误提示；日志「放行媒体权限：video」 |
 | 启动页 / 错误页配色 | 与主界面同一套浅色 token（`#f7f9fc` / `#ffffff` / `#0f766e`），无深色闪屏 |
 | 关闭窗口 | `taskkill /T /F` 后端，残留 `一纸成课*` / `python*` 进程 0 个，监听端口 0 个 |
-| `pytest apps/server/tests -q` | **370 passed**（25 个测试文件，约 70 s） |
+| `pytest apps/server/tests -q` | **395 passed**（25 个测试文件，约 70 s） |
 | `npm --prefix apps/web test` | **18 passed**（前端纯函数单测，Node ≥ 22.6 自带测试器） |
 
 ## v0.1.5 发布验证（2026-11-16）

@@ -104,7 +104,9 @@ python apps/server/scripts/reset_demo.py
 | `APP_PORT` | `8710` | 后端端口，改端口需同步改 `apps/web/vite.config.ts` 的 `BACKEND` |
 | `WEB_CSP` | `1` | `SERVE_WEB=1` 托管前端时补 CSP 响应头；排障可设 `0` 关闭 |
 
-缺字段按默认值补，未知字段忽略，旧配置原样能跑。v0.1.5 的新行为都带开关，关掉即回退旧行为。
+缺字段按默认值补，未知字段忽略，旧配置原样能跑。**v0.1.5 的三项修复（结构检查 / 等价判分 / 事件落库）缺省启用**——它们修的是表述缺陷与能力缺口，需要默认可见；各设 `0` 即回退旧行为。混合检索缺省 `legacy`（零依赖），`hybrid` 显式开启。打包版不读 `.env`，回退需要在启动前设同名环境变量。
+
+嵌入调参（一般不用改）：`EMBED_TIMEOUT_SECONDS=10`、`EMBED_BATCH_SIZE=16`、`EMBED_MAX_CHARS=1000`、`HYBRID_CORPUS_LIMIT=500`。
 
 ## 功能
 
@@ -173,7 +175,7 @@ sequenceDiagram
 | 路径 | 内容 |
 |---|---|
 | `apps/server/app/` | FastAPI 服务、编排器、七个 Agent、Provider 层、safe_math 白名单、混合检索 |
-| `apps/server/tests/` | 25 个测试文件、370 个用例（`pytest` 一条命令跑完，约 70 s）：判分等价、验算三级、结构检查、检索融合、编排回环、批改归因、修正留痕、事件落库、接口 |
+| `apps/server/tests/` | 25 个测试文件、395 个用例（`pytest` 一条命令跑完，约 70 s）：判分等价、验算三级、结构检查、检索融合、编排回环、批改归因、修正留痕、事件落库、接口 |
 | `apps/web/tests/` | 18 个前端纯函数用例（`npm test`，Node 自带测试器）：上传闸门、流式字段归一、批改结论清洗、回放合成 |
 | `apps/server/scripts/` | 演示前重置脚本 |
 | `scripts/` | 样例生成、演示预置、**评测脚本**（`eval_verify.py` / `eval_retrieve.py`）、**端到端冒烟**（`e2e_smoke.py`，Playwright 7 条主路径） |
