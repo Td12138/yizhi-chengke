@@ -30,7 +30,7 @@ CARD_SUMMARY_MAX_CHARS = 500
 CARD_FORMULA_MAX_CHARS = 2000
 CARD_BODY_MAX_CHARS = 20000
 # 服务版本：与 apps/web、apps/desktop 的 package.json 保持一致
-APP_VERSION = "0.1.4"
+APP_VERSION = "0.1.5"
 # 托管前端时的 CSP：与 apps/desktop/main.js 的 APP_CSP 同源
 # KaTeX 字体走 data:，拍照预览走 blob:，PDF 预览走 frame-src 'self'
 CSP_POLICY = "; ".join(
