@@ -23,3 +23,4 @@
 |---|---|---|
 | 2026-11-15 | `2026-11-15-D0-选题与骨架.md` | `docs: 立项目与方案设计`、`feat(server): 六 Agent 编排、质检回环与 mock provider` |
 | 2026-11-15 | `2026-11-15-D1-子代理任务书.md` | `feat(server): Provider 预设…`、`feat(web): 卡片编辑…`、`feat(server): AI 批改…` 等并行子代理产出 |
+| 2026-11-16 | `2026-11-16-D2-整体优化.md` | `feat: 质检三级验算语义…`、`feat: 判分追加 sympy 等价判定…`、`feat: 人工修正留痕…`、`feat: 批改新增方法归因…`、`feat: Agent 事件落库与回放…`、`feat: 混合检索…`、`feat: 评测脚本及首轮结果…`、`feat: Playwright 端到端冒烟…`、v0.1.5 发布 |
