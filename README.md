@@ -241,13 +241,13 @@ python scripts/e2e_smoke.py --shots ./shots       # Playwright 7 条主路径（
 | README 复现指南 | 本文件 |
 | AI 对话快照 | `docs/ai-logs/`，索引见 `docs/ai-logs/README.md` |
 | 技术文档 | `docs/技术文档.pdf`（正文 `docs/技术文档.md`） |
-| 桌面版（可选） | [Releases](https://github.com/Td12138/yizhi-chengke/releases)：`yizhi-chengke-0.1.4-win64.zip` 解压即用（推荐，约 0.2s 出窗，200.5 MB），`YizhiChengke-0.1.4-portable.exe` 单文件（136.9 MB，首次解压 36–48s） |
+| 桌面版（可选） | [Releases](https://github.com/Td12138/yizhi-chengke/releases)：`yizhi-chengke-0.1.5-win64.zip` 解压即用（推荐，约 0.2s 出窗，200.5 MB），`YizhiChengke-0.1.5-portable.exe` 单文件（136.9 MB，首次解压 36–48s） |
 | 演示视频 | 随作品在赛事平台提交，不入库 |
 
-v0.1.4 产物校验（SHA256）：
+v0.1.5 产物校验（SHA256）：
 
-- `yizhi-chengke-0.1.4-win64.zip`：`C14D7B7745B85D4B549DA778985A206F4F25BBA44DDA229E2528225C2C022EEE`
-- `YizhiChengke-0.1.4-portable.exe`：`23A67F283B0ED5DB9167AAA584C0601AEB46A98C74ACAA1FBAABF1404A6209C4`
+- `yizhi-chengke-0.1.5-win64.zip`：`FAC8D985971D9614252859D45A4443165B5FFAC705DF84E75A07C7A5CEA41799`
+- `YizhiChengke-0.1.5-portable.exe`：`3E60BE65D9ED56FDFDC6A0E02953D8CAEB4242D4D91D1E6EE50F15B5006C17C7`
 
 ## 红线
 
