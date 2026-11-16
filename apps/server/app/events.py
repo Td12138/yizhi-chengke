@@ -1,4 +1,8 @@
-"""Agent 事件总线：一次运行 = 一个 run，事件顺序落历史，SSE 按序消费并支持中途接入。"""
+"""Agent 事件总线：一次运行 = 一个 run，事件顺序落历史，SSE 按序消费并支持中途接入。
+
+v0.1.5 起事件同时落库（开关 EVENT_PERSIST）：run 被回收或服务重启后，
+仍可通过 /api/runs/{run_id}/events 回放。落库失败只影响回放，绝不影响 SSE。
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,8 @@ import json
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, AsyncIterator
+
+from . import config, db
 
 # 单次运行保留的事件上限，防止长时间运行占内存
 MAX_EVENTS_PER_RUN = 500
@@ -72,6 +78,11 @@ class EventBus:
 
     def create(self, run_id: str) -> Run:
         self._prune()
+        if config.EVENT_PERSIST:
+            try:
+                db.prune_events(config.EVENT_PERSIST_RUNS)
+            except Exception:
+                pass  # 清理失败不影响新 run；表顶多涨一点
         run = Run(run_id)
         self._runs[run_id] = run
         return run
@@ -93,6 +104,18 @@ class EventBus:
         if run is None:
             return
         run.append(event)
+        if config.EVENT_PERSIST:
+            try:
+                db.insert_event(
+                    event.run_id,
+                    event.agent,
+                    event.phase,
+                    event.message,
+                    event.payload,
+                    event.ts,
+                )
+            except Exception:
+                pass  # 落库失败只影响事后回放，SSE 主流程不能被打断
 
     def close(self, run_id: str, error: str | None = None) -> None:
         run = self._runs.get(run_id)

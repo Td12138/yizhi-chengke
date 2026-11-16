@@ -25,14 +25,17 @@ import {
 import { checkUpload, fileBadge } from "./lib/upload";
 import {
   fetchGraph,
+  fetchRunEvents,
   fetchSources,
   fetchStats,
   getJSON,
+  outcomeFromEvents,
   postFile,
   postJSON,
   streamRun,
   timeoutMsFor,
 } from "./api";
+import type { StreamOutcome } from "./api";
 import type {
   AgentEvent,
   AskAnswer,
@@ -488,6 +491,18 @@ export default function App() {
     setLogs((prev) => [...prev, entry].slice(-MAX_LOGS));
   }
 
+  /** 从落库事件回放（v0.1.5）：run 被回收 / 后端重启后，重试不再重复 POST。 */
+  async function replayPersistedRun(runId: string): Promise<StreamOutcome | null> {
+    let events: AgentEvent[];
+    try {
+      events = await fetchRunEvents(runId);
+    } catch {
+      return null;
+    }
+    for (const event of events) handleEvent(event);
+    return outcomeFromEvents(events);
+  }
+
   /**
    * 一次运行：发起任务 → 订阅事件流 → 处理结果。
    * 出错时写明是哪一步，并保留重试入口（不静默失败）。
@@ -548,7 +563,7 @@ export default function App() {
 
       activeRun.current = runId;
       before?.();
-      const outcome = await streamRun(runId, handleEvent, {
+      let outcome = await streamRun(runId, handleEvent, {
         timeoutMs,
         onTick: (elapsedMs) => {
           if (runToken.current !== token) return;
@@ -561,8 +576,14 @@ export default function App() {
         outcome.reason === "broken" &&
         outcome.eventCount === 0
       ) {
-        // 服务端已回收这次 run：下次重试回到「重新发起」
-        resumableRun.current = null;
+        // 服务端已回收这次 run（或已重启）：先试落库事件回放
+        const replayed = await replayPersistedRun(runId);
+        if (replayed) {
+          outcome = replayed;
+        } else {
+          // 落库也没有：下次重试回到「重新发起」
+          resumableRun.current = null;
+        }
       }
 
       if (outcome.reason === "timeout") {
@@ -804,56 +825,61 @@ export default function App() {
       activeRun.current = runId;
       setBoard({});
       if (resumeRunId) setLogs([]);
-      const outcome = await streamRun(
-        runId,
-        (event) => {
-          handleEvent(event);
-          if (event.agent !== "review") return;
-          if (event.phase === "delta") {
-            // 流式中断后服务端会回退成完整评语；先把已显示的半句清掉，
-            // 否则 UI 会看到「中断前半句 + 完整评语」粘在一起。
-            if (event.payload?.notice === "stream-fallback") {
-              setReviews((prev) => {
-                const current = prev[questionId];
-                if (!current || current.status !== "running") return prev;
-                return { ...prev, [questionId]: { ...current, text: "" } };
-              });
-              setNotice(event.message || "流式批改中断，已回退为一次性批改");
-              return;
-            }
-            const chunk =
-              typeof event.payload?.chunk === "string" ? event.payload.chunk : "";
-            if (!chunk) return;
+      const reviewEventHandler = (event: AgentEvent) => {
+        handleEvent(event);
+        if (event.agent !== "review") return;
+        if (event.phase === "delta") {
+          // 流式中断后服务端会回退成完整评语；先把已显示的半句清掉，
+          // 否则 UI 会看到「中断前半句 + 完整评语」粘在一起。
+          if (event.payload?.notice === "stream-fallback") {
             setReviews((prev) => {
               const current = prev[questionId];
               if (!current || current.status !== "running") return prev;
-              return {
-                ...prev,
-                [questionId]: { ...current, text: current.text + chunk },
-              };
+              return { ...prev, [questionId]: { ...current, text: "" } };
             });
-          } else if (event.phase === "error") {
-            failReview(questionId, event.message || "批改 Agent 报错", token);
+            setNotice(event.message || "流式批改中断，已回退为一次性批改");
+            return;
           }
-        },
-        {
-          timeoutMs,
-          onTick: (elapsedMs) => {
-            if (runToken.current !== token) return;
-            setRun((prev) =>
-              prev && prev.active ? { ...prev, elapsedMs } : prev
-            );
-          },
+          const chunk =
+            typeof event.payload?.chunk === "string" ? event.payload.chunk : "";
+          if (!chunk) return;
+          setReviews((prev) => {
+            const current = prev[questionId];
+            if (!current || current.status !== "running") return prev;
+            return {
+              ...prev,
+              [questionId]: { ...current, text: current.text + chunk },
+            };
+          });
+        } else if (event.phase === "error") {
+          failReview(questionId, event.message || "批改 Agent 报错", token);
         }
-      );
+      };
+      let outcome = await streamRun(runId, reviewEventHandler, {
+        timeoutMs,
+        onTick: (elapsedMs) => {
+          if (runToken.current !== token) return;
+          setRun((prev) =>
+            prev && prev.active ? { ...prev, elapsedMs } : prev
+          );
+        },
+      });
 
       if (
         resumeRunId &&
         outcome.reason === "broken" &&
         outcome.eventCount === 0
       ) {
-        // 服务端已回收这次 run：下次「重试」回到重新发起
-        delete reviewRuns.current[questionId];
+        // 服务端已回收这次 run（或已重启）：先试落库事件回放
+        const events = await fetchRunEvents(runId).catch(() => [] as AgentEvent[]);
+        const replayed = outcomeFromEvents(events);
+        if (replayed) {
+          for (const event of events) reviewEventHandler(event);
+          outcome = replayed;
+        } else {
+          // 落库也没有：下次「重试」回到重新发起
+          delete reviewRuns.current[questionId];
+        }
       }
 
       if (outcome.reason === "timeout") {

@@ -198,6 +198,15 @@ async def events(run_id: str) -> StreamingResponse:
     )
 
 
+@app.get("/api/runs/{run_id}/events")
+async def run_events(run_id: str) -> dict:
+    """已落库事件的回放（v0.1.5）：run 被回收或重启后，前端重试仍可取回历史。"""
+    persisted = db.list_events(run_id)
+    if not persisted:
+        raise HTTPException(404, f"运行 {run_id} 没有已落库的事件")
+    return {"run_id": run_id, "events": persisted}
+
+
 @app.get("/api/cards")
 async def cards() -> dict:
     return {"cards": db.list_cards()}

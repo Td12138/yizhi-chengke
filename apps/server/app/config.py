@@ -135,6 +135,10 @@ def _env_flag(name: str, default: str = "false") -> bool:
 VERIFY_STRUCTURE_CHECK = _env_flag("VERIFY_STRUCTURE_CHECK", "true")
 # 填空判分在字符串/数值比对失败后追加 sympy 等价判定；设 0 回退纯字符串规则
 JUDGE_SYMPY_EQUIV = _env_flag("JUDGE_SYMPY_EQUIV", "true")
+# Agent 事件落库：重启 / run 回收后仍可回放；设 0 回退「事件只在内存」的旧行为
+EVENT_PERSIST = _env_flag("EVENT_PERSIST", "true")
+# 落库事件保留最近多少个 run（按 run 最后一条事件的新旧排序）
+EVENT_PERSIST_RUNS = _env_int("EVENT_PERSIST_RUNS", 200)
 
 # ---- 可选静态托管（桌面封装用；缺省 false，Web 开发模式行为不变）----
 SERVE_WEB = _env_flag("SERVE_WEB")

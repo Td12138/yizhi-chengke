@@ -446,12 +446,66 @@ def search_cards(query: str, top_k: int) -> list[dict]:
     return [card for _, card in scored[:top_k]]
 
 
-def insert_event(run_id: str, agent: str, phase: str, payload: Any) -> None:
+def insert_event(
+    run_id: str,
+    agent: str,
+    phase: str,
+    message: str,
+    payload: Any,
+    ts: float | None = None,
+) -> None:
+    """事件落库（v0.1.5）：message 与 payload 分开存，回放时还原完整事件。"""
     with connect() as conn:
         conn.execute(
             """INSERT INTO agent_event (run_id, agent, phase, payload, ts)
                VALUES (?, ?, ?, ?, ?)""",
-            (run_id, agent, phase, json.dumps(payload, ensure_ascii=False), time.time()),
+            (
+                run_id,
+                agent,
+                phase,
+                json.dumps({"message": message, "payload": payload}, ensure_ascii=False),
+                ts if ts is not None else time.time(),
+            ),
+        )
+
+
+def list_events(run_id: str) -> list[dict]:
+    """按落库顺序还原某次运行的事件：形状与 SSE 的 Event 一致。"""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM agent_event WHERE run_id = ? ORDER BY id ASC",
+            (run_id,),
+        ).fetchall()
+    events: list[dict] = []
+    for row in rows:
+        try:
+            body = json.loads(row["payload"] or "{}")
+        except json.JSONDecodeError:
+            body = {}
+        events.append(
+            {
+                "run_id": row["run_id"],
+                "agent": row["agent"],
+                "phase": row["phase"],
+                "message": body.get("message", ""),
+                "payload": body.get("payload", {}),
+                "ts": row["ts"],
+            }
+        )
+    return events
+
+
+def prune_events(keep_runs: int) -> None:
+    """只保留最近 keep_runs 个 run 的事件，防止 agent_event 无限增长。"""
+    if keep_runs <= 0:
+        return
+    with connect() as conn:
+        conn.execute(
+            """DELETE FROM agent_event WHERE run_id NOT IN (
+                 SELECT run_id FROM agent_event
+                 GROUP BY run_id ORDER BY MAX(id) DESC LIMIT ?
+               )""",
+            (keep_runs,),
         )
 
 

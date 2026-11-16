@@ -143,6 +143,28 @@ export function fetchCardRevisions(id: number): Promise<CardRevision[]> {
   );
 }
 
+/** 已落库事件回放（v0.1.5）：run 被回收 / 后端重启后取回历史；无记录时抛 ApiError。 */
+export function fetchRunEvents(runId: string): Promise<AgentEvent[]> {
+  return getJSON<{ events: AgentEvent[] }>(`/api/runs/${runId}/events`).then(
+    (data) => data.events ?? []
+  );
+}
+
+/** 由回放事件合成流结果：末条是编排器 done/error 才算结束，否则视为不完整。 */
+export function outcomeFromEvents(events: AgentEvent[]): StreamOutcome | null {
+  if (events.length === 0) return null;
+  const last = events[events.length - 1];
+  const ended =
+    last.agent === "orchestrator" &&
+    (last.phase === "done" || last.phase === "error");
+  return {
+    last,
+    reason: ended ? (last.phase === "error" ? "error" : "done") : "broken",
+    eventCount: events.length,
+    elapsedMs: 0,
+  };
+}
+
 /** 知识谱系图：节点 = 知识点卡片，边 = 共同出现关系。 */
 export function fetchGraph(): Promise<GraphData> {
   return getJSON<GraphData>("/api/graph");
