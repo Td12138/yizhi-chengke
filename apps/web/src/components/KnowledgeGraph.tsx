@@ -54,22 +54,22 @@ const RADIUS_MAX = 28;
 
 /* ---------- 学术脉络图配色：暖纸底 + 松烟绿 + 细实线 ---------- */
 /** 没出过题也没被问过的中性纸色 */
-const COLOR_NEUTRAL_FILL = "#efe9dc";
-const COLOR_NEUTRAL_STROKE = "#9c917f";
-/** 有题未问的浅松烟绿（#dce8e3）；被问深度递增时向主色（#1b4d3e）过渡 */
-const COLOR_LOW: [number, number, number] = [220, 232, 227];
-const COLOR_ACCENT: [number, number, number] = [27, 77, 62];
+const COLOR_NEUTRAL_FILL = "#f1ede4";
+const COLOR_NEUTRAL_STROKE = "#a1a1aa";
+/** 有题未问的浅松烟绿（#dcefe6）；被问深度递增时向主色（#14532d）过渡 */
+const COLOR_LOW: [number, number, number] = [220, 239, 230];
+const COLOR_ACCENT: [number, number, number] = [20, 83, 45];
 /** 深主色描边（#0f342a），让重色节点轮廓更实 */
-const COLOR_ACCENT_DARK: [number, number, number] = [15, 52, 42];
-const COLOR_FRESH_FILL = "#dce8e3";
-const COLOR_FRESH_STROKE = "#1b4d3e";
-const COLOR_TEXT = "#2e2a23";
-const COLOR_TEXT_LIGHT = "#fbf8f1";
+const COLOR_ACCENT_DARK: [number, number, number] = [12, 58, 32];
+const COLOR_FRESH_FILL = "#dcefe6";
+const COLOR_FRESH_STROKE = "#14532d";
+const COLOR_TEXT = "#27272a";
+const COLOR_TEXT_LIGHT = "#fffdf9";
 /** 连线：默认浅褐，高亮松烟绿 */
-const COLOR_EDGE = "#9c917f";
-const COLOR_EDGE_ACTIVE = "#1b4d3e";
-/** 图版编号 / 轴注用衬线字 */
-const SERIF = "Georgia, 'Times New Roman', serif";
+const COLOR_EDGE = "#a1a1aa";
+const COLOR_EDGE_ACTIVE = "#14532d";
+/** 坐标轴字母 / 刻度沿用全站无衬线字体，Windows 上不发虚 */
+const AXIS_FONT = "'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif";
 
 /** 节点内圈（细实线双圈）：内缩距离、线宽、透明度 */
 const INNER_RING_INSET = 3.5;
@@ -636,7 +636,7 @@ export default function KnowledgeGraph({ graph, loading, error }: Props) {
                           y={BADGE_FONT_SIZE * BADGE_BASELINE_RATIO}
                           textAnchor="middle"
                           fontSize={BADGE_FONT_SIZE}
-                          fontFamily={SERIF}
+                          fontFamily={AXIS_FONT}
                           fill={badgeFill}
                           pointerEvents="none"
                         >

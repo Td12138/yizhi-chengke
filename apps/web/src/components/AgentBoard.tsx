@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { Status } from "../types";
 
 export const AGENTS = [
@@ -36,6 +37,11 @@ const PHASE_MARK: Record<string, string> = {
   error: "!",
 };
 
+/**
+ * 七步流水线状态条：7 个节点一字排开，节点之间用箭头连接。
+ * 节点只保留三行信息（工序号 + 名称 + 状态 / 职责或当前消息），
+ * 空闲时不再画一大片写着「—」的监控格。
+ */
 export default function AgentBoard({
   board,
 }: {
@@ -47,32 +53,35 @@ export default function AgentBoard({
         const entry = board[agent.key];
         const phase = entry?.phase ?? "idle";
         const label = PHASE_LABEL[phase] ?? phase;
-        // 7 个 Agent 在 3 列网格里最后一行只剩 1 张：末尾那张铺满整行，
-        // 桌面端内部横向排布，避免右侧 2/3 全空。
-        const isLast = index === AGENTS.length - 1;
+        const detail = entry?.message?.trim() || agent.role;
         return (
-          <div
-            key={agent.key}
-            className={`agent agent-${phase}${isLast ? " agent-wide" : ""}`}
-            title={`${agent.label}：${label}`}
-          >
-            <div className="agent-head">
-              <span className="agent-title">
-                <span className="agent-no" aria-hidden="true">
-                  {String(index + 1).padStart(AGENT_NO_PAD, "0")}
-                </span>
-                <span className="agent-name">{agent.label}</span>
+          <Fragment key={agent.key}>
+            {index > 0 && (
+              <span className="board-link" aria-hidden="true">
+                →
               </span>
-              <span className="agent-state">
-                <span className="agent-mark" aria-hidden="true">
-                  {PHASE_MARK[phase] ?? "○"}
+            )}
+            <div
+              className={`agent agent-${phase}`}
+              title={`${agent.label}：${label}${entry?.message ? ` · ${entry.message}` : ""}`}
+            >
+              <div className="agent-head">
+                <span className="agent-title">
+                  <span className="agent-no" aria-hidden="true">
+                    {String(index + 1).padStart(AGENT_NO_PAD, "0")}
+                  </span>
+                  <span className="agent-name">{agent.label}</span>
                 </span>
-                {label}
-              </span>
+                <span className="agent-state">
+                  <span className="agent-mark" aria-hidden="true">
+                    {PHASE_MARK[phase] ?? "○"}
+                  </span>
+                  {label}
+                </span>
+              </div>
+              <div className="agent-msg">{detail}</div>
             </div>
-            <div className="agent-role">{agent.role}</div>
-            <div className="agent-msg">{entry?.message || "—"}</div>
-          </div>
+          </Fragment>
         );
       })}
     </div>

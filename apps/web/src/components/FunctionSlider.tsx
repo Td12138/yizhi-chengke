@@ -13,7 +13,7 @@ import {
   CURVE_WIDTH,
   FIGURE_STYLE,
   GRID_WIDTH,
-  SERIF,
+  AXIS_FONT,
 } from "../lib/plot-theme";
 
 const WIDTH = 420;
@@ -295,7 +295,7 @@ export default function FunctionSlider({ explain }: { explain: Explain }) {
               textAnchor="middle"
               fontSize={TICK_FONT_SIZE}
               fill={COLOR_TICK}
-              fontFamily={SERIF}
+              fontFamily={AXIS_FONT}
             >
               {trimNumber(x, 0)}
             </text>
@@ -309,7 +309,7 @@ export default function FunctionSlider({ explain }: { explain: Explain }) {
             textAnchor={yLabelAnchor}
             fontSize={TICK_FONT_SIZE}
             fill={COLOR_TICK}
-            fontFamily={SERIF}
+            fontFamily={AXIS_FONT}
           >
             {trimNumber(y, 0)}
           </text>
@@ -322,7 +322,7 @@ export default function FunctionSlider({ explain }: { explain: Explain }) {
           textAnchor="end"
           fontSize={AXIS_NAME_FONT_SIZE}
           fontStyle="italic"
-          fontFamily={SERIF}
+          fontFamily={AXIS_FONT}
           fill={COLOR_INK}
         >
           x
@@ -333,7 +333,7 @@ export default function FunctionSlider({ explain }: { explain: Explain }) {
           textAnchor="start"
           fontSize={AXIS_NAME_FONT_SIZE}
           fontStyle="italic"
-          fontFamily={SERIF}
+          fontFamily={AXIS_FONT}
           fill={COLOR_INK}
         >
           y
@@ -344,7 +344,7 @@ export default function FunctionSlider({ explain }: { explain: Explain }) {
           textAnchor={yLabelAnchor}
           fontSize={ORIGIN_FONT_SIZE}
           fontStyle="italic"
-          fontFamily={SERIF}
+          fontFamily={AXIS_FONT}
           fill={COLOR_INK}
         >
           O
@@ -391,7 +391,7 @@ export default function FunctionSlider({ explain }: { explain: Explain }) {
               y={vertexLabelY}
               textAnchor={vertexLabelAnchor}
               fontSize={VERTEX_FONT_SIZE}
-              fontFamily={SERIF}
+              fontFamily={AXIS_FONT}
               fill={COLOR_INK}
             >
               ({trimNumber(vertexX, VERTEX_DIGITS)},{" "}
@@ -419,7 +419,7 @@ export default function FunctionSlider({ explain }: { explain: Explain }) {
           style={{
             color: COLOR_TICK,
             fontSize: CAPTION_FONT_SIZE,
-            fontFamily: SERIF,
+            fontFamily: AXIS_FONT,
             whiteSpace: "nowrap",
           }}
         >

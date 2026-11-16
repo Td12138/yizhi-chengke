@@ -12,7 +12,7 @@ import {
   CURVE_WIDTH,
   FIGURE_STYLE,
   GRID_WIDTH,
-  SERIF,
+  AXIS_FONT,
 } from "../lib/plot-theme";
 
 /**
@@ -474,7 +474,7 @@ export default function FunctionPlot({ expression, xMin = -6, xMax = 6 }: Props)
               textAnchor="middle"
               fontSize={TICK_FONT_SIZE}
               fill={COLOR_TICK}
-              fontFamily={SERIF}
+              fontFamily={AXIS_FONT}
             >
               {formatTick(value)}
             </text>
@@ -494,7 +494,7 @@ export default function FunctionPlot({ expression, xMin = -6, xMax = 6 }: Props)
                 textAnchor={yLabelAnchor}
                 fontSize={TICK_FONT_SIZE}
                 fill={COLOR_TICK}
-                fontFamily={SERIF}
+                fontFamily={AXIS_FONT}
               >
                 {formatTick(value)}
               </text>
@@ -508,7 +508,7 @@ export default function FunctionPlot({ expression, xMin = -6, xMax = 6 }: Props)
           textAnchor="end"
           fontSize={AXIS_NAME_FONT_SIZE}
           fontStyle="italic"
-          fontFamily={SERIF}
+          fontFamily={AXIS_FONT}
           fill={COLOR_INK}
         >
           x
@@ -521,7 +521,7 @@ export default function FunctionPlot({ expression, xMin = -6, xMax = 6 }: Props)
               textAnchor="start"
               fontSize={AXIS_NAME_FONT_SIZE}
               fontStyle="italic"
-              fontFamily={SERIF}
+              fontFamily={AXIS_FONT}
               fill={COLOR_INK}
             >
               y
@@ -532,7 +532,7 @@ export default function FunctionPlot({ expression, xMin = -6, xMax = 6 }: Props)
               textAnchor={yLabelAnchor}
               fontSize={AXIS_NAME_FONT_SIZE}
               fontStyle="italic"
-              fontFamily={SERIF}
+              fontFamily={AXIS_FONT}
               fill={COLOR_INK}
             >
               O
@@ -557,7 +557,7 @@ export default function FunctionPlot({ expression, xMin = -6, xMax = 6 }: Props)
             y={axisY - TICK_TEXT_OFFSET}
             textAnchor="middle"
             fontSize={TICK_FONT_SIZE}
-            fontFamily={SERIF}
+            fontFamily={AXIS_FONT}
             fill={COLOR_TICK}
             stroke={COLOR_PAPER}
             strokeWidth={HINT_HALO_WIDTH}

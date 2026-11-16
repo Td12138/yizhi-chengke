@@ -5,14 +5,14 @@
  */
 
 /* ---------- 纸墨丹青：墨色坐标轴 + 松烟绿曲线 + 朱砂红标记 ---------- */
-export const COLOR_INK = "#4a4338";
-export const COLOR_CURVE = "#1b4d3e";
-export const COLOR_GRID = "#e7e0d2";
-export const COLOR_TICK = "#8b8172";
-export const COLOR_PAPER = "#fbf8f1";
-export const COLOR_MARK = "#b8332a";
-/** 坐标轴标签用衬线斜体：教材插图里最典型的做法 */
-export const SERIF = "Georgia, 'Times New Roman', serif";
+export const COLOR_INK = "#3f3f46";
+export const COLOR_CURVE = "#14532d";
+export const COLOR_GRID = "#ece8df";
+export const COLOR_TICK = "#71717a";
+export const COLOR_PAPER = "#fffdf9";
+export const COLOR_MARK = "#be123c";
+/** 坐标轴字母 / 刻度沿用全站无衬线字体，Windows 上不发虚 */
+export const AXIS_FONT = "'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif";
 
 export const AXIS_WIDTH = 1.2;
 export const CURVE_WIDTH = 2;

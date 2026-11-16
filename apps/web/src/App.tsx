@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DragEvent } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import AgentBoard, { AGENTS } from "./components/AgentBoard";
 import CameraCapture from "./components/CameraCapture";
 import CardEditor from "./components/CardEditor";
@@ -100,6 +100,16 @@ const QUICK_PROMPTS = [
     count: 3,
   },
 ] as const;
+
+/** 面板 5 的一键提问预设：点一下填进输入框，是否检索仍由「提问」决定 */
+const ASK_PRESETS = [
+  "为什么这里要配方？",
+  "判别式大于 0 说明什么？",
+  "正弦函数的最小正周期怎么算？",
+] as const;
+
+/** 知识卡片左上角序号补零位数：CARD 01 */
+const CARD_NO_PAD = 2;
 
 /** 难度英文 → 中文展示（后端多为 easy / medium / hard，其余原样显示） */
 const DIFFICULTY_LABEL: Record<string, string> = {
@@ -428,13 +438,16 @@ export default function App() {
       typeof event.payload?.chunk === "string" &&
       event.payload.chunk !== "";
     if (isReviewChunk) return;
+    // 序号必须在入队前取定：setLogs 的 updater 是延迟执行的，
+    // 在里面读 seq.current 会让同一批事件的日志拿到同一个序号（key 重复）
     seq.current += 1;
-    setLogs((prev) =>
-      [
-        ...prev,
-        { seq: seq.current, agent: event.agent, phase: event.phase, message },
-      ].slice(-MAX_LOGS)
-    );
+    const entry: LogItem = {
+      seq: seq.current,
+      agent: event.agent,
+      phase: event.phase,
+      message,
+    };
+    setLogs((prev) => [...prev, entry].slice(-MAX_LOGS));
   }
 
   /**
@@ -885,6 +898,12 @@ export default function App() {
 
   const busyLabel = busy ? ACTION_LABEL[busy] ?? busy : "";
   const stages = run ? STAGES[run.kind] ?? [] : [];
+  /** 排行榜只在 Top 10 内算热度基准，避免小样本被一条异常值压扁 */
+  const topAsked = stats?.top_asked.slice(0, TOP_ASKED) ?? [];
+  const heatMax = Math.max(
+    1,
+    ...topAsked.map((item) => item.ask_count + item.question_count)
+  );
 
   return (
     <div className="app">
@@ -993,6 +1012,13 @@ export default function App() {
             }}
             onDrop={onDrop}
           >
+            {/* 取景框四角：像相机扫描台一样框住纸面 */}
+            <span className="scan-corners" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              <span />
+            </span>
             {preview ? (
               preview.kind === "image" ? (
                 <img src={preview.url} alt={`已选择：${preview.name}`} />
@@ -1108,11 +1134,13 @@ export default function App() {
             />
           )}
           <ul className={`cards ${editingId !== null ? "cards-editing" : ""}`}>
-            {cards.map((card) => (
+            {cards.map((card, index) => (
               <li
                 key={card.id}
                 ref={editingId === card.id ? editorRef : undefined}
-                className={`card ${editingId === card.id ? "card-editing" : ""}`}
+                className={`card card-tone-${index % 3} ${
+                  editingId === card.id ? "card-editing" : ""
+                }`}
               >
                 {editingId === card.id ? (
                   <CardEditor
@@ -1122,6 +1150,9 @@ export default function App() {
                   />
                 ) : (
                   <>
+                    <span className="card-no" aria-hidden="true">
+                      CARD {String(index + 1).padStart(CARD_NO_PAD, "0")}
+                    </span>
                     <div className="card-head">
                       <div className="card-title">{card.title}</div>
                       <button
@@ -1158,7 +1189,19 @@ export default function App() {
         </section>
 
         <section className="panel panel-board">
-          <h2>2 · Agent 协同看板</h2>
+          <div className="panel-head panel-head-board">
+            <h2>2 · Agent 协同看板</h2>
+            <span
+              className={`board-live${busy ? " board-live-busy" : ""}`}
+              title={logs.length > 0 ? logs[logs.length - 1].message : ""}
+            >
+              {busy
+                ? `运行中 · ${busyLabel}`
+                : logs.length > 0
+                  ? `最近 · ${logs[logs.length - 1].message || logs[logs.length - 1].phase}`
+                  : "7 步流水线 · 待命"}
+            </span>
+          </div>
           {run && stages.length > 0 && (
             <RunProgress
               run={run}
@@ -1168,9 +1211,18 @@ export default function App() {
             />
           )}
           <AgentBoard board={board} />
-          <div className="log" ref={logRef}>
+          <div className={`log${logs.length === 0 ? " log-quiet" : ""}`} ref={logRef}>
+            {logs.length > 0 && (
+              <div className="log-head">
+                <span className="log-head-title">事件流</span>
+                <span className="log-count">{logs.length} 条</span>
+              </div>
+            )}
             {logs.map((item) => (
               <div key={item.seq} className={`log-line log-${item.phase}`}>
+                <span className="log-seq" aria-hidden="true">
+                  {String(item.seq).padStart(2, "0")}
+                </span>
                 <span className="log-agent">
                   {AGENT_LABEL[item.agent] ?? item.agent}
                 </span>
@@ -1179,10 +1231,12 @@ export default function App() {
             ))}
             {logs.length === 0 && (
               <div className="log-empty">
-                <p>上传一页纸后，这里会依次记录七个 Agent 的处理过程。</p>
-                <p className="log-empty-sub">
-                  命题与质检最多来回 3 轮（首轮 + 2 次重试），直到题目答案能被验算通过。
-                </p>
+                <span className="log-empty-mark" aria-hidden="true">
+                  ›
+                </span>
+                <span>
+                  等待任务：上传一页纸或生成练习卷后，七个 Agent 的处理过程会实时流到这里。
+                </span>
               </div>
             )}
           </div>
@@ -1273,7 +1327,7 @@ export default function App() {
               return (
                 <article
                   key={question.id}
-                  className="question"
+                  className={`question${review ? " question-wide" : ""}`}
                   style={{
                     animationDelay: `${Math.min(
                       index * QUESTION_STAGGER_MS,
@@ -1281,21 +1335,29 @@ export default function App() {
                     )}ms`,
                   }}
                 >
-                  <div className="q-tags">
-                    <span className={`tag ${diffClass}`}>{diffLabel}</span>
-                    {ready ? (
-                      <span
-                        className={`tag ${question.verified ? "tag-ok" : "tag-warn"}`}
-                      >
-                        {question.verified ? "✓ 已验算" : "! 未验算"}
+                  <div className="q-head">
+                    <span className="q-no">
+                      <span className="q-no-badge" aria-hidden="true">
+                        Q{index + 1}
                       </span>
-                    ) : (
-                      <span className="tag tag-pending">待验算</span>
-                    )}
+                      第 {index + 1} 题
+                    </span>
+                    <div className="q-tags">
+                      <span className={`tag ${diffClass}`}>{diffLabel}</span>
+                      {ready ? (
+                        <span
+                          className={`tag ${question.verified ? "tag-ok" : "tag-warn"}`}
+                        >
+                          {question.verified ? "✓ 已验算" : "! 未验算"}
+                        </span>
+                      ) : (
+                        <span className="tag tag-pending">待验算</span>
+                      )}
+                      {!question.verified && question.verify_log && (
+                        <span className="q-verify">{question.verify_log}</span>
+                      )}
+                    </div>
                     <span className="q-id">{ready ? `#${question.id}` : "草稿"}</span>
-                    {!question.verified && question.verify_log && (
-                      <span className="q-verify">{question.verify_log}</span>
-                    )}
                   </div>
 
                   <div className="q-stem">
@@ -1463,7 +1525,23 @@ export default function App() {
             </button>
           </div>
 
-          {askAnswer && (
+          {/* 一键提问：只填入输入框，是否检索仍由「提问」决定 */}
+          <div className="samples presets ask-presets">
+            <span className="samples-label">一键提问：</span>
+            {ASK_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className="sample-chip"
+                disabled={busy !== null}
+                onClick={() => setAskQuery(preset)}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+
+          {askAnswer ? (
             <div className="answer">
               <p>
                 <MathText text={askAnswer.answer} />
@@ -1478,6 +1556,26 @@ export default function App() {
                 {askAnswer.cards.length === 0 && (
                   <span className="cite cite-none">无匹配材料</span>
                 )}
+              </div>
+            </div>
+          ) : (
+            <div className="ask-sample">
+              <div className="ask-sample-head">
+                <span className="ask-sample-badge">示例</span>
+                带出处的回答长这样
+              </div>
+              <p className="ask-sample-q">问：为什么这里要配方？</p>
+              <p className="ask-sample-a">
+                配方法把 <MathText text="$ax^2+bx+c$" /> 整理成{" "}
+                <MathText
+                  text={"$a(x+\\frac{b}{2a})^2+\\frac{4ac-b^2}{4a}$"}
+                />
+                ，顶点坐标与对称轴可以直接读出，也是推导求根公式的起点。
+              </p>
+              <div className="citations">
+                出处：
+                <span className="cite">一元二次方程与求根公式</span>
+                <span className="cite">二次函数的图象与性质</span>
               </div>
             </div>
           )}
@@ -1502,19 +1600,28 @@ export default function App() {
                 最常被问 Top {TOP_ASKED}
                 <span className="hint">来自 /api/stats</span>
               </h3>
-              {stats && stats.top_asked.length > 0 ? (
+              {topAsked.length > 0 ? (
                 <ol className="top-asked">
-                  {stats.top_asked.slice(0, TOP_ASKED).map((item, index) => (
-                    <li key={item.id}>
-                      <span className="rank">{index + 1}</span>
-                      <span className="top-title" title={item.title}>
-                        {item.title}
-                      </span>
-                      <span className="top-counts">
-                        问 {item.ask_count} · 题 {item.question_count}
-                      </span>
-                    </li>
-                  ))}
+                  {topAsked.map((item, index) => {
+                    const heat = item.ask_count + item.question_count;
+                    const pct = Math.max(
+                      6,
+                      Math.round((heat / heatMax) * 100)
+                    );
+                    return (
+                      <li
+                        key={item.id}
+                        style={{ "--heat": `${pct}%` } as CSSProperties}
+                        title={`被问 ${item.ask_count} 次 · 出题 ${item.question_count} 道`}
+                      >
+                        <span className="rank">{index + 1}</span>
+                        <span className="top-title">{item.title}</span>
+                        <span className="top-counts">
+                          问 {item.ask_count} · 题 {item.question_count}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ol>
               ) : (
                 <div className="empty">还没有提问记录，去第 5 栏追问一次。</div>
