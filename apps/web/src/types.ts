@@ -23,6 +23,18 @@ export interface Card {
   tags: string;
   formula: string;
   body: string;
+  /** 最近一次人工修正时间（Unix 秒）；从未修正为 null，旧后端无此字段 */
+  revised_at?: number | null;
+}
+
+/** 一条人工修正记录：改前/改后值与时间（v0.1.5 修正留痕） */
+export interface CardRevision {
+  id: number;
+  card_id: number;
+  field: string;
+  old_value: string;
+  new_value: string;
+  created_at: number;
 }
 
 /** 卡片人工修正：只提交改动字段，未提交的字段由后端保留 */

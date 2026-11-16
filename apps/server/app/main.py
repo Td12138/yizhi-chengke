@@ -212,6 +212,14 @@ async def patch_card(card_id: int, req: CardPatch) -> dict:
     return card
 
 
+@app.get("/api/cards/{card_id}/revisions")
+async def card_revisions(card_id: int) -> dict:
+    """人工修正历史（v0.1.5）：改前/改后值与时间，新→旧。"""
+    if db.get_card(card_id) is None:
+        raise HTTPException(404, f"卡片 {card_id} 不存在")
+    return {"revisions": db.list_card_revisions(card_id)}
+
+
 @app.get("/api/sources")
 async def sources() -> dict:
     """原图归档列表：按上传时间倒序，image_url 可直接取原图。"""

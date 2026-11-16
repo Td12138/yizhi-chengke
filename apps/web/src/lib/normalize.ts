@@ -62,6 +62,7 @@ export function normalizeStreamedCard(raw: any, tempId: number): Card {
     tags,
     formula: String(raw?.formula ?? ""),
     body: String(raw?.body ?? ""),
+    revised_at: typeof raw?.revised_at === "number" ? raw.revised_at : null,
   };
 }
 

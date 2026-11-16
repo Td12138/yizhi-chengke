@@ -807,6 +807,57 @@ body {
   flex-wrap: wrap;
 }
 
+/* 修正历史：改前 → 改后，留痕可追溯（v0.1.5） */
+.editor-revisions {
+  border-top: 1px dashed var(--line-strong);
+  padding-top: 8px;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+
+.editor-revisions summary {
+  cursor: pointer;
+  color: var(--dim);
+}
+
+.editor-revisions ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editor-revisions li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rev-field {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rev-time {
+  color: var(--dim);
+}
+
+.rev-old {
+  text-decoration: line-through;
+  color: var(--dim);
+}
+
+.rev-arrow {
+  color: var(--dim);
+}
+
+.rev-new {
+  color: var(--ok);
+}
+
 /* ---------- 运行进度 ---------- */
 .run-progress {
   margin-bottom: 12px;

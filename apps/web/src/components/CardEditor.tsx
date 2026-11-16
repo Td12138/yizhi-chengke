@@ -1,10 +1,32 @@
-import { useState } from "react";
-import { ApiError, updateCard } from "../api";
-import type { Card, CardPatch } from "../types";
+import { useEffect, useState } from "react";
+import { ApiError, fetchCardRevisions, updateCard } from "../api";
+import type { Card, CardPatch, CardRevision } from "../types";
 import MathText from "./MathText";
 
 /** 标题为空时提交没有意义，先在前端拦住 */
 const TITLE_MAX_CHARS = 120;
+
+/** 修正历史里字段名 → 中文标签 */
+const FIELD_LABEL: Record<string, string> = {
+  title: "标题",
+  summary: "摘要",
+  formula: "公式",
+  body: "正文",
+};
+
+/** 历史条目里旧/新值的最长展示字符数，超出截断（正文可能很长） */
+const VALUE_PREVIEW_CHARS = 60;
+
+function previewValue(value: string): string {
+  const text = value.trim() || "（空）";
+  return text.length > VALUE_PREVIEW_CHARS
+    ? `${text.slice(0, VALUE_PREVIEW_CHARS)}…`
+    : text;
+}
+
+function formatTime(ts: number): string {
+  return new Date(ts * 1000).toLocaleString();
+}
 
 type Draft = {
   title: string;
@@ -44,6 +66,22 @@ export default function CardEditor({
   const [draft, setDraft] = useState<Draft>(() => toDraft(card));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [revisions, setRevisions] = useState<CardRevision[]>([]);
+
+  // 打开编辑器即拉修正历史；旧后端没有该路由时静默降级（不显示历史区块）
+  useEffect(() => {
+    let active = true;
+    fetchCardRevisions(card.id)
+      .then((items) => {
+        if (active) setRevisions(items);
+      })
+      .catch(() => {
+        if (active) setRevisions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [card.id]);
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -163,6 +201,25 @@ export default function CardEditor({
           {dirty ? "有未保存的改动" : "尚未修改"}
         </span>
       </div>
+
+      {revisions.length > 0 && (
+        <details className="editor-revisions">
+          <summary>修正历史（{revisions.length} 条，改前值已留痕）</summary>
+          <ul>
+            {revisions.map((revision) => (
+              <li key={revision.id}>
+                <span className="rev-field">
+                  {FIELD_LABEL[revision.field] ?? revision.field}
+                </span>
+                <span className="rev-time">{formatTime(revision.created_at)}</span>
+                <span className="rev-old">{previewValue(revision.old_value)}</span>
+                <span className="rev-arrow" aria-hidden="true">→</span>
+                <span className="rev-new">{previewValue(revision.new_value)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </form>
   );
 }

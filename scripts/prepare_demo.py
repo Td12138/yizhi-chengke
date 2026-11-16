@@ -33,7 +33,7 @@ DEMO_IMAGES = [
 ]
 DEMO_REQUIREMENT = "给我出 5 道这页的变式题，中等难度"
 DEMO_COUNT = 5
-TABLES = ("agent_event", "attempt", "question", "card", "source")
+TABLES = db.RESET_TABLES
 
 
 async def prepare(purge_images: bool) -> None:

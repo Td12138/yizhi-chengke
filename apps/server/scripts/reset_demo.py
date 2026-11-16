@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import config, db  # noqa: E402
 
-TABLES = ("agent_event", "attempt", "question", "card", "source")
+TABLES = db.RESET_TABLES
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

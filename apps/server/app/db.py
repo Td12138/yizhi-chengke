@@ -62,7 +62,20 @@ CREATE TABLE IF NOT EXISTS agent_event (
   payload TEXT    NOT NULL DEFAULT '{}',
   ts      REAL    NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS card_revision (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  card_id    INTEGER NOT NULL,
+  field      TEXT    NOT NULL,
+  old_value  TEXT    NOT NULL,
+  new_value  TEXT    NOT NULL,
+  created_at REAL    NOT NULL
+);
 """
+
+
+# 演示重置要清空的表（顺序无关，外键未启用）；reset_demo / prepare_demo 共用这一份
+RESET_TABLES = ("card_revision", "agent_event", "attempt", "question", "card", "source")
 
 
 def connect() -> sqlite3.Connection:
@@ -84,6 +97,8 @@ CARD_EXTRA_COLUMNS = {
     "ask_count": "INTEGER NOT NULL DEFAULT 0",
     "question_count": "INTEGER NOT NULL DEFAULT 0",
     "last_asked_at": "REAL",
+    # 最近一次人工修正时间；从未修正为 NULL（v0.1.5 修正留痕）
+    "revised_at": "REAL",
 }
 
 # 原图归档后才有值的列：display_name=归档文件名，renamed_at=改名时间（没改名为 NULL）
@@ -168,7 +183,11 @@ CARD_PATCH_FIELDS = ("title", "summary", "formula", "body")
 
 
 def update_card(card_id: int, fields: dict) -> dict | None:
-    """按字段局部更新，返回更新后的完整卡片；卡片不存在返回 None。"""
+    """按字段局部更新，返回更新后的完整卡片；卡片不存在返回 None。
+
+    v0.1.5 修正留痕：每个真实变更（新值 != 旧值）在同一事务里写一条
+    card_revision，并更新 revised_at；提交原值不产生记录。
+    """
     allowed = {
         key: value
         for key, value in fields.items()
@@ -178,16 +197,48 @@ def update_card(card_id: int, fields: dict) -> dict | None:
         row = conn.execute("SELECT * FROM card WHERE id = ?", (card_id,)).fetchone()
         if row is None:
             return None
-        if allowed:
-            assignments = ", ".join(f"{key} = ?" for key in allowed)
+        changed = {
+            key: value
+            for key, value in allowed.items()
+            if str(value) != str(row[key] if row[key] is not None else "")
+        }
+        if changed:
+            now = time.time()
+            assignments = ", ".join(f"{key} = ?" for key in changed)
             conn.execute(
-                f"UPDATE card SET {assignments} WHERE id = ?",
-                (*allowed.values(), card_id),
+                f"UPDATE card SET {assignments}, revised_at = ? WHERE id = ?",
+                (*changed.values(), now, card_id),
+            )
+            conn.executemany(
+                """INSERT INTO card_revision
+                   (card_id, field, old_value, new_value, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                [
+                    (card_id, key, str(row[key] or ""), str(value), now)
+                    for key, value in changed.items()
+                ],
             )
         updated = conn.execute(
             "SELECT * FROM card WHERE id = ?", (card_id,)
         ).fetchone()
     return dict(updated) if updated else None
+
+
+# 修正历史默认返回条数
+REVISION_LIST_LIMIT = 50
+
+
+def list_card_revisions(
+    card_id: int, limit: int = REVISION_LIST_LIMIT
+) -> list[dict]:
+    """某张卡片的人工修正历史：新→旧，含改前/改后值。"""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM card_revision WHERE card_id = ? "
+            "ORDER BY id DESC LIMIT ?",
+            (card_id, limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def get_source(source_id: int) -> dict | None:

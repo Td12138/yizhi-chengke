@@ -2,6 +2,7 @@ import type {
   AgentEvent,
   Card,
   CardPatch,
+  CardRevision,
   GraphData,
   SourcesData,
   StatsData,
@@ -133,6 +134,13 @@ export function postFile<T>(url: string, file: File): Promise<T> {
  */
 export function updateCard(id: number, patch: CardPatch): Promise<Card> {
   return patchJSON<Card>(`/api/cards/${id}`, patch);
+}
+
+/** 人工修正历史：新→旧；旧后端无此路由时调用方按 404/405 静默降级。 */
+export function fetchCardRevisions(id: number): Promise<CardRevision[]> {
+  return getJSON<{ revisions: CardRevision[] }>(`/api/cards/${id}/revisions`).then(
+    (data) => data.revisions ?? []
+  );
 }
 
 /** 知识谱系图：节点 = 知识点卡片，边 = 共同出现关系。 */

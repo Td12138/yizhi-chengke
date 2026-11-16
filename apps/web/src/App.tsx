@@ -1213,8 +1213,17 @@ export default function App() {
                         <p>{card.body}</p>
                       </details>
                     )}
-                    {editedIds.includes(card.id) && (
-                      <span className="tag tag-edited">已人工修正</span>
+                    {(editedIds.includes(card.id) || card.revised_at) && (
+                      <span
+                        className="tag tag-edited"
+                        title={
+                          card.revised_at
+                            ? `最近修正：${new Date(card.revised_at * 1000).toLocaleString()}（历史见编辑器）`
+                            : "本次会话内修正"
+                        }
+                      >
+                        已人工修正
+                      </span>
                     )}
                   </>
                 )}
