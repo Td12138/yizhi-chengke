@@ -206,6 +206,30 @@ class Orchestrator:
                 q for q in questions if isinstance(q, dict) and q.get("verified")
             ]
             dropped = len(questions) - len(delivered)
+            if not delivered and config.VERIFY_FALLBACK_ON_EXHAUST:
+                # 连续多轮都过不了验算时，退一步交付「结构合格」的题并显式标注未验算，
+                # 否则真实模型一次格式翻车就让整个功能不可用（演示会直接断在这）。
+                from .agents.verify import LEVEL_STRUCTURAL, structural_check
+
+                rescued = []
+                for question in questions:
+                    if not isinstance(question, dict):
+                        continue
+                    ok, note = structural_check(question)
+                    if ok:
+                        question["verified"] = True
+                        question["verify_level"] = LEVEL_STRUCTURAL
+                        question["verify_log"] = f"已达重试上限，降级为结构检查：{note}"
+                        rescued.append(question)
+                if rescued:
+                    delivered = rescued
+                    dropped = len(questions) - len(delivered)
+                    await self._emit(
+                        run_id,
+                        "orchestrator",
+                        "notice",
+                        f"验算连续 {max_rounds} 轮未通过，降级为结构检查交付 {len(delivered)} 道（界面标注「结构检查」）",
+                    )
             if not delivered:
                 raise RuntimeError("全部题目未通过质检，拒绝交付未验证内容")
 

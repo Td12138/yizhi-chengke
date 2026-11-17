@@ -31,8 +31,15 @@ SYSTEM_PROMPTS = {
         '{"questions": [{"stem_latex": str, "qtype": "fill"|"choice", '
         '"options": [str], "answer": str, "solution": str, '
         '"difficulty": "easy"|"medium"|"hard", '
-        '"verify": {"expr": "sympy 可解析的表达式", "subs": {"x": 数值}, "expect": 数值}}]}。'
-        "要求：题干数学内容用 LaTeX（$...$）；verify 必须给出可用代入数值的校验式；只输出 JSON。"
+        '"verify": {"expr": "可直接计算的数值表达式", "subs": {"x": 数值}, "expect": 数值}}]}。'
+        "要求：题干数学内容用 LaTeX（$...$）；只输出 JSON。"
+        "verify 校验式必须能被机器计算，遵守："
+        "① expr 只用数字、+ - * / ** ^、括号和**单个字母**变量（乘号要写出来：用 a*b，不要写 ab）；"
+        "② subs 的键是单个字母，值是数字；"
+        "③ expect 是数字；"
+        "④ 不要写 LaTeX、不要写 {subs} 之类占位符。"
+        '示例：{"expr": "(x-2)**2 - 1", "subs": {"x": 2}, "expect": -1}。'
+        "实在无法给出数值校验时省略 verify 字段（系统会做结构检查），不要编造。"
     ),
     "explain": (
         "你是讲解器。针对用户答错的题，输出 JSON："
@@ -225,12 +232,111 @@ async def _remote(task: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _loads(content)
 
 
+def _extract_json_object(text: str) -> str | None:
+    """从模型输出里截出第一个「括号配平」的 JSON 对象。
+
+    不用贪婪正则 ``\\{.*\\}``：模型常在 JSON 后面再补一段解释，贪婪匹配会把尾巴一起吞掉。
+    这里按字符串状态扫描，忽略字符串里的花括号与转义。
+    """
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
+def _repair_json(text: str) -> str:
+    """修模型 JSON 的两种常见瑕疵：LaTeX 单反斜杠、尾随逗号。
+
+    注意 ``\\f`` / ``\\b`` / ``\\n`` / ``\\t`` 在 JSON 里是合法转义，
+    模型写 ``\\frac`` 时会被解析成换页符 + "rac"，语序不报错但内容是错的。
+    这里把字符串内所有「非 \\\\ 开头、非 \\" 的单反斜杠」一律补成 ``\\\\``，
+    只在检测到 LaTeX（含 ``$`` 且存在单反斜杠字母串）时启用。
+    """
+    out: list[str] = []
+    in_str = False
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if not in_str:
+            out.append(ch)
+            if ch == '"':
+                in_str = True
+            i += 1
+            continue
+        if ch == '"':
+            in_str = False
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "\\":
+            nxt = text[i + 1] if i + 1 < n else ""
+            if nxt in ('\\', '"'):
+                out.append(ch)
+                out.append(nxt)
+                i += 2
+                continue
+            out.append("\\\\")
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    repaired = "".join(out)
+    repaired = re.sub(r",(\s*[}\]])", r"\1", repaired)
+    return repaired
+
+
+def _looks_like_latex_with_bad_escape(text: str) -> bool:
+    """含 ``$`` 且存在「单反斜杠 + 字母」，说明字符串里的 LaTeX 反斜杠没转义。"""
+    if "$" not in text:
+        return False
+    return re.search(r"(?<!\\)\\[A-Za-z]", text) is not None
+
+
 def _loads(text: str) -> dict[str, Any]:
     text = text.strip()
+    raw: dict[str, Any] | None = None
     try:
-        return json.loads(text)
+        raw = json.loads(text)
     except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", text, re.S)
-        if not match:
-            raise ValueError(f"模型输出不是 JSON：{text[:200]}")
-        return json.loads(match.group(0))
+        raw = None
+
+    # 合法但语义被转义吃掉的 LaTeX（\frac → 换页符）也要走修复
+    if raw is not None and not _looks_like_latex_with_bad_escape(text):
+        return raw
+
+    candidate = _extract_json_object(text)
+    if candidate is None:
+        if raw is not None:
+            return raw
+        raise ValueError(f"模型输出不是 JSON：{text[:200]}")
+
+    for attempt in (_repair_json(candidate), candidate):
+        try:
+            return json.loads(attempt)
+        except json.JSONDecodeError:
+            continue
+    if raw is not None:
+        return raw
+    raise ValueError(f"模型输出不是合法 JSON：{text[:200]}")

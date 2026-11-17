@@ -66,6 +66,15 @@ def structural_check(question: dict) -> tuple[bool, str]:
     return True, "无可验算表达式，结构检查通过：题干、答案与题型完整"
 
 
+def _is_format_issue(detail: str) -> bool:
+    """白名单拒绝里，哪些属于「模型格式没写对」而不是「疑似注入」。
+
+    只放行两类：多字母标识符（如 ``ac`` 想写 ``a*c``）、表达式不是数学式。
+    含非法字符、subs 非数值、超长等情况一律保持拒绝——那是安全边界。
+    """
+    return detail.startswith("表达式含未知标识符") or detail.startswith("表达式不是数学式")
+
+
 def check_question_detailed(question: dict) -> tuple[bool, str, str]:
     """返回 (是否通过, 说明, 验算级别)。级别取 LEVEL_* 常量。"""
     verify = question.get("verify")
@@ -87,15 +96,29 @@ def check_question_detailed(question: dict) -> tuple[bool, str, str]:
         subs = safe_math.parse_subs(raw_subs)
         value = float(sp.N(expr.subs(subs)))
     except UnsafeInput as exc:  # 白名单拒绝：原样说明原因
-        return False, str(exc), LEVEL_SYMBOLIC
-    except Exception as exc:  # 语法错误 / 无法求值：同样视为不通过
-        return False, f"表达式无法解析：{exc}", LEVEL_SYMBOLIC
+        detail = str(exc)
+        if config.VERIFY_DEGRADE_FORMAT and _is_format_issue(detail):
+            # 模型写不好校验式（多字母变量、LaTeX 残留）不是「答案错」，
+            # 降级为结构检查并如实标注，避免真实模型下整批被格式问题打死。
+            passed, note = structural_check(question)
+            return passed, f"{detail}；降级为结构检查：{note}", LEVEL_STRUCTURAL
+        return False, detail, LEVEL_SYMBOLIC
+    except Exception as exc:  # 语法错误 / 无法求值
+        detail = f"表达式无法解析：{exc}"
+        if config.VERIFY_DEGRADE_FORMAT:
+            passed, note = structural_check(question)
+            return passed, f"{detail}；降级为结构检查：{note}", LEVEL_STRUCTURAL
+        return False, detail, LEVEL_SYMBOLIC
 
     try:
         expect = float(verify.get("expect", 0.0))
     except (TypeError, ValueError, OverflowError):
         # expect 是 "C" / None / 10**400 时不能让整批发题中断
-        return False, f"期望值不是数值：{verify.get('expect')!r}", LEVEL_SYMBOLIC
+        detail = f"期望值不是数值：{verify.get('expect')!r}"
+        if config.VERIFY_DEGRADE_FORMAT:
+            passed, note = structural_check(question)
+            return passed, f"{detail}；降级为结构检查：{note}", LEVEL_STRUCTURAL
+        return False, detail, LEVEL_SYMBOLIC
 
     passed = abs(value - expect) <= TOLERANCE
     detail = f"{expr_text} @ {raw_subs or '(无代入)'} = {value:g}，期望 {expect:g}"

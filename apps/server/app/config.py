@@ -138,6 +138,12 @@ def _env_flag(name: str, default: str = "false") -> bool:
 # ---- 质检与判分开关（v0.1.5；关掉即回退旧行为）----
 # 无 verify 的题做结构检查（题干/答案/题型）；设 0 回退「直接放行」的旧行为
 VERIFY_STRUCTURE_CHECK = _env_flag("VERIFY_STRUCTURE_CHECK", "true")
+# 模型给的校验式写错格式（多字母变量 / LaTeX 残留）时降级为结构检查，而不是直接判错；
+# 真正的注入字符（引号、下划线、subs 非数值）仍然拒绝，不受此开关影响。
+VERIFY_DEGRADE_FORMAT = _env_flag("VERIFY_DEGRADE_FORMAT", "true")
+# 重试耗尽后仍无题通过验算时，是否退一步交付「结构合格」的题（标注未验算）；
+# 关掉即旧行为：直接报「全部题目未通过质检」。
+VERIFY_FALLBACK_ON_EXHAUST = _env_flag("VERIFY_FALLBACK_ON_EXHAUST", "true")
 # 填空判分在字符串/数值比对失败后追加 sympy 等价判定；设 0 回退纯字符串规则
 JUDGE_SYMPY_EQUIV = _env_flag("JUDGE_SYMPY_EQUIV", "true")
 # Agent 事件落库：重启 / run 回收后仍可回放；设 0 回退「事件只在内存」的旧行为
