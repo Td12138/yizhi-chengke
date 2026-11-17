@@ -7,8 +7,8 @@
 
 % 表格：字号小一档、行距收紧，窄页面下仍能放下 4–5 列
 \AtBeginEnvironment{longtable}{\small}
-\renewcommand{\arraystretch}{0.92}
-\setlength{\LTpre}{2pt}
+\renewcommand{\arraystretch}{0.88}
+\setlength{\LTpre}{1pt}
 \setlength{\LTpost}{4pt}
 
 % 目录独占一页（只在 -Toc 时生效）
@@ -25,7 +25,7 @@
 \floatplacement{figure}{H}
 
 % 段落间距略收紧（正文 10 pt + 1.35 倍行距已由 pandoc 变量设置）
-\setlength{\parskip}{2pt}
+\setlength{\parskip}{0pt}
 \setlength{\parindent}{0pt}
 
 % 正文里少量符号（勾/叉/箭头/不等号）在主字体中缺字形，统一映射到数学符号，

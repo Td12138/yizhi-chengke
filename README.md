@@ -21,14 +21,42 @@
                                                               └──▶ 答错 ──▶ 可视化讲解
 ```
 
+## 10 分钟极速复现（评委路径）
+
+> 目标：从 clone 到看见「出题 → 驳回 → 重生成 → 批改」全链路，**不超过 10 分钟**，全程不需要 API Key。
+
+| 步骤 | 耗时 | 命令 / 动作 | 通过标准 |
+|---|---|---|---|
+| 1 取代码 | 0.5 min | `git clone <repo> && cd yizhi-chengke` | 目录里能看到 `apps/`、`docs/` |
+| 2 装后端 | 3–4 min | 见下方「1. 后端」 | `pip` 无报错，`uvicorn` 打印 `Uvicorn running on http://127.0.0.1:8710` |
+| 3 装前端 | 2–3 min | 见下方「2. 前端」 | Vite 打印 `Local: http://127.0.0.1:5173` |
+| 4 验活 | 0.2 min | `curl http://127.0.0.1:8710/api/health` | 返回 `"ready": true` |
+| 5 跑一遍 | 2 min | 上传 / 示例板书 → 生成 → 答一题 → 批改 | 看板出现 7 个 Agent，其中 1 次 `verify/rejected` |
+| 6（可选）跑测试 | 2 min | `python -m pytest apps/server/tests -q` | `395 passed` |
+
+依赖清单（无需额外系统包）：
+
+| 依赖 | 版本 | 用途 |
+|---|---|---|
+| Python | ≥ 3.11 | 后端（`fastapi==0.163.0` 要求） |
+| Node.js | ≥ 18（跑前端单测需 ≥ 22.6） | 前端构建与开发服务器 |
+| 包管理 | pip / npm | 后端 8 个直接依赖、前端 3 个运行时依赖 |
+
+环境变量模板：仓库根 `.env.example`（全部留空也能跑）。最小可用配置只有两行：
+
+```bash
+VLM_PROVIDER=mock
+LLM_PROVIDER=mock
+```
+
+接真实模型时把 provider 改成 `qwen` / `glm` / `deepseek` 并填对应 `*_API_KEY`；完整字段见下方「配置」。
+
 ## 环境要求
 
 | 依赖 | 版本 |
 |---|---|
 | Python | ≥ 3.11（`fastapi==0.163.0` 要求 ≥ 3.11） |
 | Node.js | ≥ 18（Vite 5 要求；前端单测 `npm test` 用到 TS 类型擦除，需 ≥ 22.6） |
-
-## 快速开始
 
 无需任何 API Key —— 缺省使用 `mock` 提供方，内置三套教学样例（二次函数 / 一元二次方程 / 三角函数），按上传文件名分流，整条链路可完整演示。
 
@@ -104,7 +132,7 @@ python apps/server/scripts/reset_demo.py
 | `APP_PORT` | `8710` | 后端端口，改端口需同步改 `apps/web/vite.config.ts` 的 `BACKEND` |
 | `WEB_CSP` | `1` | `SERVE_WEB=1` 托管前端时补 CSP 响应头；排障可设 `0` 关闭 |
 
-缺字段按默认值补，未知字段忽略，旧配置原样能跑。**v0.1.5 的三项修复（结构检查 / 等价判分 / 事件落库）缺省启用**——它们修的是表述缺陷与能力缺口，需要默认可见；各设 `0` 即回退旧行为。混合检索缺省 `legacy`（零依赖），`hybrid` 显式开启。打包版不读 `.env`，回退需要在启动前设同名环境变量。
+缺字段按默认值补，未知字段忽略，旧配置原样能跑。**v0.1.5 的三项修复（结构检查 / 等价判分 / 事件落库）缺省启用**——它们修的是表述缺陷与能力缺口，需要默认可见；各设 `0` 即回退旧行为。混合检索缺省 `legacy`（零依赖），`hybrid` 显式开启。桌面版（目录版与单文件版，v0.1.6 起）都会读取 **exe 同级目录** 的 `.env`；单文件版由 `PORTABLE_EXECUTABLE_DIR` 定位该目录。
 
 嵌入调参（一般不用改）：`EMBED_TIMEOUT_SECONDS=10`、`EMBED_BATCH_SIZE=16`、`EMBED_MAX_CHARS=1000`、`HYBRID_CORPUS_LIMIT=500`。
 
