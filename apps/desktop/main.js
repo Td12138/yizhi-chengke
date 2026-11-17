@@ -301,6 +301,11 @@ function childEnv() {
     PYTHONIOENCODING: 'utf-8',
   };
   if (DATA_DIR) env.APP_DATA_DIR = DATA_DIR;
+  // 单文件版（NSIS portable）每次解压到 %TEMP%，程序目录里没有用户配置；
+  // PORTABLE_EXECUTABLE_DIR 是 exe 真正所在目录，用它指向旁边的 .env。
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    env.YIZHI_ENV_FILE = path.join(process.env.PORTABLE_EXECUTABLE_DIR, '.env');
+  }
   return env;
 }
 

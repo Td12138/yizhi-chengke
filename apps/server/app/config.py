@@ -44,6 +44,11 @@ def _env_int(name: str, default: int) -> int:
 
 
 # 必须先加载 .env 再读 APP_DATA_DIR：否则写在 .env 里的数据目录不生效
+# 桌面版单文件（portable）每次解压到临时目录，Electron 用 YIZHI_ENV_FILE 指向 exe 旁的 .env；
+# 该文件优先加载，缺的项再由程序目录的 .env 补齐。
+_ENV_FILE_OVERRIDE = (os.environ.get("YIZHI_ENV_FILE") or "").strip()
+if _ENV_FILE_OVERRIDE:
+    _load_dotenv(Path(_ENV_FILE_OVERRIDE))
 _load_dotenv(PROJECT_ROOT / ".env")
 
 # 桌面版由 Electron 用 APP_DATA_DIR 指到用户可写目录；缺省仍是仓库内 data/
