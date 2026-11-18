@@ -9,6 +9,7 @@ import KnowledgeGraph from "./components/KnowledgeGraph";
 import MathText from "./components/MathText";
 import ReviewPanel from "./components/ReviewPanel";
 import RunProgress from "./components/RunProgress";
+import SolvePanel from "./components/SolvePanel";
 import SourceLightbox from "./components/SourceLightbox";
 import SourceStrip from "./components/SourceStrip";
 import TourGuide, { shouldAutoStartTour } from "./components/TourGuide";
@@ -242,6 +243,8 @@ export default function App() {
   const [board, setBoard] = useState<Board>({});
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  /** 「拍题讲题」面板展开：默认收起，不改变原有上传流程 */
+  const [solveOpen, setSolveOpen] = useState(false);
   const [run, setRun] = useState<RunInfo | null>(null);
   const [error, setError] = useState<RunError | null>(null);
   const [notice, setNotice] = useState("");
@@ -1181,6 +1184,23 @@ export default function App() {
               </button>
             ))}
           </div>
+
+          <div className="solve-entry">
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              aria-expanded={solveOpen}
+              onClick={() => setSolveOpen((open) => !open)}
+            >
+              {solveOpen ? "收起拍题讲题" : "拍题讲题"}
+            </button>
+            {!solveOpen && (
+              <span className="solve-hint">上传一道题，让 AI 讲一遍再出一道变式</span>
+            )}
+          </div>
+          {solveOpen && (
+            <SolvePanel card={cards[0] ?? null} busyKind={busy} onUpload={ingest} />
+          )}
 
           <h3>
             知识点卡片 <span className="count">{cards.length}</span>
