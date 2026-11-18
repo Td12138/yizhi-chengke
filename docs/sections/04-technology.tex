@@ -127,33 +127,6 @@ def parse_expression(text):
 
 方程不能简单比较右端：\env{x=2} 与 \env{y=2} 判错，\env{2=x} 与 \env{x=2} 判同，\env{x/2=2} 与 2 判错。为避免 \env{simplify} 展开高次幂，判分指数上限为 20，超限或异常退回旧结果而不放宽。多答案、集合与区间仍未实现。
 
-\subsection{结构化批改与流式呈现}
-
-批改需要同时满足两种阅读方式。分数、得分点、步骤和首个错误应当稳定可核对，评语则适合连续阅读。系统把结构化结果放在结束事件的 \env{payload} 中，把分片文本放在 \env{delta.chunk} 中。前端收到结束事件后才渲染分数环和步骤高亮，避免文本尚未结束时结构已经变化。
-
-\begin{lstlisting}[language=json,caption={结构化批改 JSON 契约示例，实际响应还包含渲染后的 text},label={lst:review-json}]
-{
-  "score": 60,
-  "verdict": "partial",
-  "points": [{"hit": true, "text": "正确代入 x=2"},
-              {"hit": false, "text": "算术结果符号错误"}],
-  "steps": [{"index": 1, "expect": "代入原式", "found": true,
-             "note": "已写出 4-8+3"},
-            {"index": 2, "expect": "计算函数值 -1", "found": false,
-             "note": "结果写成 1"}],
-  "first_error": {"step": 2, "reason": "合并常数项时符号错误"},
-  "student_method": null,
-  "better_method": {"name": "先合并再代入", "why": "减少符号操作",
-                    "steps": ["化简原式", "代入并复核"]},
-  "method_comparison": "代入法成立，需增加末步复核",
-  "reference": "-1"
-}
-\end{lstlisting}
-
-服务端对模型结果做二次收敛。分数转为整数并限制在 0--100，非法结论按分数区间补齐，步骤缺少可判读内容时丢弃，首个错误步骤必须落在有效范围内。\env{student_method.valid} 对字符串布尔做显式归一，避免 \env{"false"} 被当成真。标准答案强制取数据库题目，不采用模型另写的一份。mock 只根据字面与数值比对生成步骤诊断，不推断学生方法，因此该字段保持空值。
-
-真实 Provider 当前先取得结构结果，再将渲染评语按 8--20 字分片推送。mock 采用相同分片逻辑并标记 \env{mock-simulated-stream}，明确不是模型 token 流。通用 Provider 层仍保留 OpenAI 兼容 SSE 的增量解析与测试。若模型请求或 JSON 解析失败，批改回退本地规则并标 \env{json-fallback}；若旧式流式路径中途失败，前端先清除残片，再显示完整回退文本。流式改善等待体验，但不作为正确性的证据。
-
 \subsection{SSE 事件、数据模型与跨重启回放}
 
 一次动作对应一个 \env{run_id}，事件包含 Agent、阶段、消息、负载和时间。阶段覆盖排队、运行、增量、完成、驳回、错误和耗尽降级通知。HTTP 先建运行再启动协程，订阅者从历史起点补发，避免早期事件丢失。
@@ -164,7 +137,7 @@ def parse_expression(text):
 \centering
 \resizebox{0.97\textwidth}{!}{%
 \begin{tikzpicture}[
-  node distance=8mm and 10mm,
+  node distance=8mm and 16mm,
   entity/.style={draw=ink!60,fill=palegreen,rounded corners=2pt,align=left,font=\small,minimum width=3.25cm,minimum height=1.2cm,inner sep=6pt},
   bus/.style={draw=amber!70,fill=amber!8,rounded corners=3pt,align=center,font=\small,minimum width=3.2cm,minimum height=1.25cm},
   arr/.style={-{Stealth[length=2.2mm]},draw=muted,thick},
@@ -179,11 +152,10 @@ def parse_expression(text):
 \node[entity,below=1.25cm of run] (event) {\textbf{agent\_event}\\phase / message+payload\\最近 200 个 run};
 \node[entity,right=of event] (embedding) {\textbf{card\_embedding}\\card\_id / model / vector\\懒计算 / 换模型重嵌};
 \draw[arr] (source) -- node[rel,above]{1:N} (card);
-\draw[arr] (card) -- node[rel,above]{N:M，ID 数组} (question);
+\draw[arr] (card) -- node[rel,above]{N:M} (question);
 \draw[arr] (card) -- node[rel,right]{真实字段变化} (revision);
 \draw[arr] (question) -- node[rel,right]{1:N} (attempt);
-\draw[arr] (run) -- node[rel,right]{publish 同事务外容错写入} (event);
-\draw[arr] (card.south west) to[bend right=25] node[rel,left]{hybrid 懒缓存} (embedding.north);
+\draw[arr] (run) -- node[rel,left]{publish 容错写入} (event);
 \draw[arr] (run.north) to[bend left=18] node[rel,left]{SSE / 迟到补发} (source.south);
 \end{tikzpicture}}
 \caption{核心数据模型与事件流。业务实体保存学习材料，事件表保存运行过程，向量缓存与主卡片分离，修订记录和卡片更新保持事务一致。}
