@@ -3370,3 +3370,89 @@ body {
     transition: none;
   }
 }
+
+/* 「拍题讲题」小面板：复用米色卡片语汇，默认收起不影响主流程 */
+.solve-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 0;
+  flex-wrap: wrap;
+}
+
+.solve-hint {
+  font-size: var(--fs-xs);
+  color: var(--dim);
+}
+
+.solve-panel {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.solve-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.solve-card {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
+}
+
+.solve-card-title {
+  display: block;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.solve-card-summary {
+  margin: 4px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+
+.solve-result {
+  padding: 10px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.solve-script {
+  margin: 6px 0 0;
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.solve-params {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-formula);
+}
+
+.solve-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ok);
+}
+
+.solve-error {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--bad);
+}
