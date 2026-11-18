@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
     db.init_db()
     # 启动日志打印生效配置（脱敏：只打开关与模式，不打密钥/地址），排障一眼看出走哪条路径
     logger.info(
-        "生效配置 v%s：VLM=%s LLM=%s 结构检查=%s 等价判分=%s 事件落库=%s 检索=%s",
+        "生效配置 v%s：VLM=%s LLM=%s 结构检查=%s 等价判分=%s 事件落库=%s 检索=%s 拍题讲题=%s",
         APP_VERSION,
         config.VLM_PROVIDER,
         config.LLM_PROVIDER,
@@ -81,6 +81,7 @@ async def lifespan(app: FastAPI):
         config.JUDGE_SYMPY_EQUIV,
         config.EVENT_PERSIST,
         config.RETRIEVAL_MODE,
+        config.SOLVE_ENTRY,
     )
     yield
 
@@ -137,6 +138,12 @@ class AskRequest(BaseModel):
     query: str = Field(min_length=1, max_length=ASK_QUERY_MAX_CHARS)
 
 
+class SolveRequest(BaseModel):
+    """拍题讲题：只按卡片 id 请求，不接收任意题干文本。"""
+
+    card_id: int
+
+
 class CardPatch(BaseModel):
     """人工修正卡片：只给要改的字段，缺省字段保持原值。"""
 
@@ -158,6 +165,8 @@ async def health() -> dict:
         "vlm_ready": status["vlm_ready"],
         "llm_ready": status["llm_ready"],
         "ready": status["vlm_ready"] and status["llm_ready"],
+        # 新增字段（v0.1.7，只增不改）：前端据此决定是否显示「拍题讲题」入口
+        "solve_entry": config.SOLVE_ENTRY,
     }
 
 
@@ -323,6 +332,25 @@ async def ask(req: AskRequest) -> dict:
     bus.create(run_id)
     spawn(orchestrator.ask(run_id, req.query))
     return {"run_id": run_id}
+
+
+@app.post("/api/solve")
+async def solve(req: SolveRequest) -> dict:
+    """拍题讲题（v0.1.7，独立入口）：按卡片直接返回讲解脚本与绘图参数。
+
+    与判分 / 批改互不影响：不写 attempt、不动题目表，只读卡片。
+    """
+    if not config.SOLVE_ENTRY:
+        raise HTTPException(404, "拍题讲题入口未启用（SOLVE_ENTRY=0）")
+    card = db.get_card(req.card_id)
+    if card is None:
+        raise HTTPException(404, f"卡片 {req.card_id} 不存在")
+    result = await orchestrator.solve(card)
+    return {
+        "title": result.get("title") or "",
+        "script": result.get("script") or "",
+        "params": result.get("params"),
+    }
 
 
 def _mount_web() -> None:

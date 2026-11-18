@@ -328,6 +328,31 @@ class Orchestrator:
         finally:
             self.bus.close(run_id)
 
+    async def solve(self, card: dict) -> dict:
+        """拍题讲题（独立入口）：一张卡片直接出讲解，同步返回，不走 SSE。
+
+        复用 ExplainAgent，但事件发给一个未登记的 run —— EventBus 找不到 run
+        就直接丢弃，因此不落库、不占看板，既有流程一行不动。
+        """
+        ctx = RunContext(new_run_id(), self.bus, {})
+        # 题干取卡片摘要（没有摘要用正文，再没有才退回标题）；题干为空时讲解仍能给出通用脚本
+        stem = str(
+            card.get("summary") or card.get("body") or card.get("title") or ""
+        ).strip()
+        ctx.state.update(
+            {
+                "question": {
+                    "stem": stem,
+                    "stem_latex": card.get("formula") or stem,
+                    "qtype": "fill",
+                    "answer": "",
+                },
+                # 独立入口是「讲这道题」而不是「答错了再讲」：作答留空，讲解不提错因
+                "user_answer": "",
+            }
+        )
+        return await self._step(ctx, ExplainAgent)
+
     async def ask(self, run_id: str, query: str) -> None:
         """追问：检索卡片原文并作答。"""
         ctx = RunContext(run_id, self.bus, {"query": query})

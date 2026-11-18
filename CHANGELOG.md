@@ -2,6 +2,11 @@
 
 格式参考 Keep a Changelog；版本与 `apps/web`、`apps/desktop` 的 `package.json` 及后端 `APP_VERSION` 一致。
 
+## [Unreleased]
+
+### Added
+- 拍题讲题独立入口 `POST /api/solve`：入参 `{card_id}`，复用讲解 Agent 直接返回 `{title, script, params}`，只读卡片、不写 attempt。开关 `SOLVE_ENTRY`（缺省 1，设 0 禁用接口并隐藏前端入口）；`/api/health` 新增只读字段 `solve_entry`。
+
 ## [0.1.5] - 2026-11-16
 
 ### Added

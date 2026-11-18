@@ -32,7 +32,7 @@
 | 3 装前端 | 2–3 min | 见下方「2. 前端」 | Vite 打印 `Local: http://127.0.0.1:5173` |
 | 4 验活 | 0.2 min | `curl http://127.0.0.1:8710/api/health` | 返回 `"ready": true` |
 | 5 跑一遍 | 2 min | 上传 / 示例板书 → 生成 → 答一题 → 批改 | 看板出现 7 个 Agent，其中 1 次 `verify/rejected` |
-| 6（可选）跑测试 | 2 min | `python -m pytest apps/server/tests -q` | `395 passed` |
+| 6（可选）跑测试 | 2 min | `python -m pytest apps/server/tests -q` | `408 passed` |
 
 依赖清单（无需额外系统包）：
 
@@ -127,6 +127,7 @@ python apps/server/scripts/reset_demo.py
 | `JUDGE_SYMPY_EQUIV` | `1` | 填空判分追加 sympy 等价判定；设 `0` 回退纯字符串/数值规则 |
 | `EVENT_PERSIST` | `1` | Agent 事件落库，run 回收/重启后可回放；设 `0` 回退「事件只在内存」 |
 | `EVENT_PERSIST_RUNS` | `200` | 落库事件保留最近多少个 run |
+| `SOLVE_ENTRY` | `1` | 拍题讲题独立入口 `POST /api/solve`（一张卡片 → 讲解 / 变式题）；设 `0` 禁用接口并隐藏前端入口 |
 | `RETRIEVAL_MODE` | `legacy` | `legacy`=2-gram 字段加权；`hybrid`=2-gram + 向量 RRF 融合（需嵌入端点，故障自动回退） |
 | `EMBED_BASE_URL` / `EMBED_MODEL` / `EMBED_API_KEY` | 空 | OpenAI 兼容嵌入端点（如本地 llama-server）；仅 `hybrid` 用 |
 | `APP_PORT` | `8710` | 后端端口，改端口需同步改 `apps/web/vite.config.ts` 的 `BACKEND` |
@@ -203,7 +204,7 @@ sequenceDiagram
 | 路径 | 内容 |
 |---|---|
 | `apps/server/app/` | FastAPI 服务、编排器、七个 Agent、Provider 层、safe_math 白名单、混合检索 |
-| `apps/server/tests/` | 25 个测试文件、395 个用例（`pytest` 一条命令跑完，约 70 s）：判分等价、验算三级、结构检查、检索融合、编排回环、批改归因、修正留痕、事件落库、接口 |
+| `apps/server/tests/` | 26 个测试文件、408 个用例（`pytest` 一条命令跑完，约 80 s）：判分等价、验算三级、结构检查、检索融合、编排回环、批改归因、修正留痕、事件落库、拍题讲题、接口 |
 | `apps/web/tests/` | 18 个前端纯函数用例（`npm test`，Node 自带测试器）：上传闸门、流式字段归一、批改结论清洗、回放合成 |
 | `apps/server/scripts/` | 演示前重置脚本 |
 | `scripts/` | 样例生成、演示预置、**评测脚本**（`eval_verify.py` / `eval_retrieve.py`）、**端到端冒烟**（`e2e_smoke.py`，Playwright 7 条主路径） |

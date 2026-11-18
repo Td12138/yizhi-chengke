@@ -151,6 +151,10 @@ EVENT_PERSIST = _env_flag("EVENT_PERSIST", "true")
 # 落库事件保留最近多少个 run（按 run 最后一条事件的新旧排序）
 EVENT_PERSIST_RUNS = _env_int("EVENT_PERSIST_RUNS", 200)
 
+# ---- 拍题讲题独立入口（v0.1.7）----
+# 一张卡片直接讲这道题 / 改一道同类题；设 0 关闭接口并隐藏前端入口，既有流程不变
+SOLVE_ENTRY = _env_flag("SOLVE_ENTRY", "true")
+
 # ---- 检索（v0.1.5）----
 # legacy = 2-gram 字段加权（缺省，零依赖）；hybrid = 2-gram + 向量 RRF 融合。
 # hybrid 需要 OpenAI 兼容嵌入端点（EMBED_BASE_URL / EMBED_MODEL）；
