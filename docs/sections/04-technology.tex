@@ -1,0 +1,268 @@
+\section{关键技术}
+
+\subsection{五层架构与七 Agent 编排}
+
+系统自下而上分为本地存储、Provider 抽象、七个 Agent、运行编排和 HTTP/前端五层。FastAPI 负责参数校验、任务创建与查询，SQLite 保存来源、卡片、题目、作答、事件、修订和向量缓存，React 负责六个主要面板与交互。Electron 只是桌面启动壳，不在其中复制业务规则。模型通过 OpenAI 兼容协议接入，数学计算和检索的核心判定保留在本地代码。
+
+七个 Agent 之间不直接调用。每个 Agent 实现统一的异步 \env{run} 接口，从 \env{RunContext.state} 读取输入，将输出写回同一上下文，并通过基类发布事件。编排器决定执行顺序、轮次和最终交付。这个约束使质检可以单独测试，也使任意异常都能在编排器的统一出口转换为事件并关闭运行。
+
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=7mm and 8mm,
+  agent/.style={draw=ink!60,fill=palegreen,rounded corners=3pt,align=center,font=\small,minimum width=2.25cm,minimum height=1.12cm,inner sep=4pt},
+  layer/.style={draw=ink!45,fill=sand,rounded corners=3pt,align=center,font=\small,minimum height=1.12cm,inner sep=5pt},
+  infra/.style={draw=muted!65,fill=white,rounded corners=3pt,align=center,font=\small,minimum height=1.12cm,inner sep=5pt},
+  arr/.style={-{Stealth[length=2.2mm]},draw=muted,thick},
+  lbl/.style={font=\scriptsize,text=muted,fill=white,inner sep=1pt}
+]
+\node[layer,minimum width=3.0cm] (ui) {React + TypeScript\\六面板 / EventSource};
+\node[layer,minimum width=3.1cm,right=of ui] (api) {FastAPI\\17 个接口 / SSE};
+\node[layer,minimum width=3.6cm,right=of api] (orc) {Orchestrator\\RunContext / 有限轮次};
+\node[agent,above=1.35cm of orc,xshift=-4.0cm] (recognize) {A1 识别\\图像 $\to$ 版面块};
+\node[agent,right=of recognize] (extract) {A2 萃取\\块 $\to$ 卡片};
+\node[agent,right=of extract] (compose) {A3 命题\\卡片 $\to$ 题};
+\node[agent,right=of compose] (verify) {A4 质检\\sympy / 结构};
+\node[agent,below=1.35cm of orc,xshift=-2.65cm] (explain) {A5 讲解\\错因 $\to$ 图参数};
+\node[agent,right=of explain] (retrieve) {A6 检索\\问题 $\to$ 卡片出处};
+\node[agent,right=of retrieve] (review) {A7 批改\\作答 $\to$ 分步诊断};
+\node[infra,below=2.9cm of ui,minimum width=3.3cm] (provider) {Provider 抽象\\mock / GLM / DeepSeek};
+\node[infra,minimum width=3.4cm,right=of provider] (storage) {SQLite + 本地文件\\WAL / 事件与修订};
+\node[infra,minimum width=3.3cm,right=of storage] (deterministic) {确定性能力\\safe\_math / RRF / judge};
+\draw[arr] (ui) -- node[lbl,above]{HTTP + run\_id} (api);
+\draw[arr] (api) -- node[lbl,above]{创建运行} (orc);
+\draw[arr] (api) to[bend right=18] node[lbl,below]{事件流 / 回放} (ui);
+\draw[arr] (orc.north) -- (extract.south);
+\draw[arr] (compose) -- node[lbl,above]{验算账单} (verify);
+\draw[arr] (verify.north) to[bend left=35] node[lbl,above]{驳回重生成} (compose.north);
+\draw[arr] (orc.south) -- (retrieve.north);
+\draw[arr] (provider.east) -- (storage.west);
+\draw[arr] (storage.east) -- (deterministic.west);
+\draw[arr,dashed] (provider.north) -- (ui.south);
+\draw[arr,dashed] (deterministic.north) -- (review.south);
+\end{tikzpicture}}
+\caption{五层架构与七 Agent 编排。Agent 只通过运行上下文交换数据，模型生成与本地确定性判定分离，事件由编排器统一发布。}
+\label{fig:architecture}
+\end{figure}
+
+没有引入 LangGraph 的原因不是框架功能不足，而是当前状态数量有限。一次生成只有命题、质检、重试和交付几种状态，直接表达为异步循环更容易核对。代价是未来增加复杂分支、人工暂停和跨节点检查点时，需要重新评估编排抽象。当前接口把 Agent 与编排器分开，为这种替换保留了边界。
+
+\subsection{模型意图控制与 Prompt 链}
+
+模型意图控制不是一句“请认真回答”，而是把任务拆成输入、输出和禁止行为。识别提示词要求输出 \env{blocks}，公式必须提供 LaTeX，表格压成单行，不确定处写“无法识别”。萃取提示词要求一张卡只讲一个知识点，并固定六个字段。命题提示词固定题目七项字段，明确单个字母变量、数值代入和无法给出账单时省略 \env{verify}。追问提示词只允许依据召回卡片回答，材料没有的内容必须说明未涉及。批改提示词固定先给诊断再给结构化结果，另一种正确解法不能因为形式不同而被否定。
+
+提示词只是第一层约束。服务端仍需裁剪题量、回填来源卡片、收敛字段、执行安全解析和检查枚举值。这样可以区分“模型没有按要求写”和“系统必须拒绝”的边界。温度在视觉路径取 0，文本路径取 0.2，目的是减少格式波动，而不是把低温度解释为事实可靠。真实 Provider 使用 \env{response_format=json_object} 的任务仍需要修复器，因为兼容端点和模型对约束的执行程度不同。
+
+不同任务不共享持续增长的对话上下文。每次调用只接收当前结构，代码再执行题量裁剪、来源回填、字段收敛和安全检查。这样便于 mock 按任务返回固定对象，也避免讲解上下文影响批改。代价是跨轮指代较弱，当前追问不能理解“那第二步呢”。
+
+\subsection{输入解析、卡片模型与修订追溯}
+
+上传接口按后缀表区分五种图片与 PDF、DOCX、TXT、MD，分别限制大小并分块写入，超限清理残片。落盘采用随机文件名和原后缀，原始文件名只用于 mock 样例分流，不参与路径拼接。
+
+PDF 先评估文本层。可读字符占比至少 0.5、乱码占比不超过 5\%、有效页占比至少 0.8 时才直读。少量空白尾页不会使整份文档被判为扫描件。文本层不满足条件时，真实 VLM 路径按 180 DPI 渲染前 3 页，单份正文最多 2 万字。DOCX 按文档顺序读取段落和表格，TXT/MD 依次尝试 UTF-8 与 GB18030。加密、零字节或损坏文件即使在 mock 下也先拒绝，不能静默变成一套正常样例。
+
+标题和标签用于高权重检索，摘要进入提示词，正文作为出处，公式交给 KaTeX；学科字段已存但未参与筛选。原始块保留在 \env{source.raw_json}，与卡片一对多。标签以逗号拼接，省去关联表，但不能单独索引。
+
+人工修订只开放四个内容字段，前端提交差异，服务端再查白名单。真实变化与旧值在同一事务写入 \env{card_revision}，并更新 \env{revised_at}；空修改幂等，来源编号和创建时间不可改。
+
+\subsection{命题、三级验算与有限反馈回路}
+
+命题输出中的 \env{verify} 由 \env{expr}、\env{subs}、\env{expect} 三部分组成。它把答案检查转换为数值等式。例如，函数值题可对原式代入横坐标；顶点式等价可在一点比较两式之差；判别式与对称轴则可写成无变量的数值表达式。账单不是数学问题的通用证明语言，只适合能够转成有限计算的题。无法生成合法账单时，提示词要求省略该字段，而不是编造一个形式完整但语义错误的对象。
+
+\begin{lstlisting}[language=python,caption={命题与质检的编排伪代码，包含 v0.1.6 的耗尽降级},label={lst:loop}]
+max_rounds = VERIFY_MAX_RETRY + 1
+for round_no in range(1, max_rounds + 1):
+    state["round"] = round_no
+    questions = compose(state.cards, state.requirement, round_no)
+    results = verify_each(questions)  # safe_math + 三级语义
+    if results and all(results):
+        break
+    if round_no < max_rounds:
+        emit("orchestrator", "delta", "带原因返回命题")
+
+delivered = [q for q in questions if q.verified]
+if not delivered and VERIFY_FALLBACK_ON_EXHAUST:
+    delivered = [q for q in questions if structural_check(q).ok]
+    mark_as_structural(delivered)
+    emit("orchestrator", "notice", "达到上限，按结构检查交付")
+if not delivered:
+    raise RuntimeError("全部题目未通过质检")
+insert_questions(delivered)
+emit_done(delivered, levels=count_levels(delivered))
+\end{lstlisting}
+
+质检函数逐题返回是否通过、说明和级别。表达式先经过白名单，代入后再转浮点数，与期望值按 \(10^{-6}\) 容差比较。所有解析、类型和求值异常都在单题边界内处理，不能因为一道坏题使整批请求崩溃。没有账单时执行结构检查，选择题答案必须是范围内字母或某个选项原文。最短题干长度取 2，是为了拦截空串和单字残缺，同时保留“解方程”这类合法短题干。
+
+v0.1.6 对格式问题做了有限降级。多字母未知标识符或解析失败可以转结构检查，非法字符、危险代入和幂结构仍然拒绝。达到重试上限且没有任何通过项时，缺省允许结构合格题按 \env{structural} 交付，同时发出 \env{notice} 事件。这是为了提高真实免费档模型下的可用性，代价是最终批次可能不含符号验算题。界面级别分布与日志必须保留，配置也允许恢复全不合格即拒绝的严格路径。
+
+\subsection{安全数学解析与等价判分}
+
+安全解析把所有模型和用户数学输入视为不可信数据。字符层排除引号、下划线、方括号和属性访问符；名称层只放行单字母变量、少量函数和 \env{pi}；代入层只接受单字母键和有限数值；结构层限制表达式长度、指数大小、幂节点和幂叠幂。解析使用 \env{evaluate=False}，在求值前检查语法树，避免指数塔先消耗大量资源。
+
+\begin{lstlisting}[language=python,caption={safe\_math 白名单与求值前幂结构检查节选},label={lst:safe-math}]
+ALLOWED_CHARS = re.compile(r"^[0-9A-Za-z.+\-*/^(),= ]+$")
+GLOBAL_DICT = {"__builtins__": {}, "Symbol": sp.Symbol,
+               "Integer": sp.Integer, "Float": sp.Float,
+               "Pow": sp.Pow, "Mul": sp.Mul, "Add": sp.Add}
+
+def parse_expression(text):
+    raw = str(text or "").strip()
+    if not raw or len(raw) > MAX_EXPR_CHARS:
+        raise UnsafeInput("表达式为空或过长")
+    if not ALLOWED_CHARS.match(raw):
+        raise UnsafeInput("表达式含非法字符")
+    reject_unknown_names(raw)
+    expr = sp.parse_expr(raw.replace("^", "**"),
+                         global_dict=dict(GLOBAL_DICT),
+                         local_dict=allowed_names(), evaluate=False)
+    for power in expr.atoms(sp.Pow):
+        if isinstance(power.base, sp.Pow):
+            raise UnsafeInput("不允许幂叠幂")
+        require_finite_small_exponent(power.exp)
+    return expr
+\end{lstlisting}
+
+判分比较学生与参考答案，先展开上标、转换全角标点和 Unicode 减号，再做字符串与数值比较。全角逗号必须映射而非删除，否则 \env{(1,2)} 会变成 \env{(12)}。填空题未命中旧规则后才走 sympy，有限 LaTeX 先转纯文本并补隐式乘法。
+
+方程不能简单比较右端：\env{x=2} 与 \env{y=2} 判错，\env{2=x} 与 \env{x=2} 判同，\env{x/2=2} 与 2 判错。为避免 \env{simplify} 展开高次幂，判分指数上限为 20，超限或异常退回旧结果而不放宽。多答案、集合与区间仍未实现。
+
+\subsection{结构化批改与流式呈现}
+
+批改需要同时满足两种阅读方式。分数、得分点、步骤和首个错误应当稳定可核对，评语则适合连续阅读。系统把结构化结果放在结束事件的 \env{payload} 中，把分片文本放在 \env{delta.chunk} 中。前端收到结束事件后才渲染分数环和步骤高亮，避免文本尚未结束时结构已经变化。
+
+\begin{lstlisting}[language=json,caption={结构化批改 JSON 契约示例，实际响应还包含渲染后的 text},label={lst:review-json}]
+{
+  "score": 60,
+  "verdict": "partial",
+  "points": [{"hit": true, "text": "正确代入 x=2"},
+              {"hit": false, "text": "算术结果符号错误"}],
+  "steps": [{"index": 1, "expect": "代入原式", "found": true,
+             "note": "已写出 4-8+3"},
+            {"index": 2, "expect": "计算函数值 -1", "found": false,
+             "note": "结果写成 1"}],
+  "first_error": {"step": 2, "reason": "合并常数项时符号错误"},
+  "student_method": null,
+  "better_method": {"name": "先合并再代入", "why": "减少符号操作",
+                    "steps": ["化简原式", "代入并复核"]},
+  "method_comparison": "代入法成立，需增加末步复核",
+  "reference": "-1"
+}
+\end{lstlisting}
+
+服务端对模型结果做二次收敛。分数转为整数并限制在 0--100，非法结论按分数区间补齐，步骤缺少可判读内容时丢弃，首个错误步骤必须落在有效范围内。\env{student_method.valid} 对字符串布尔做显式归一，避免 \env{"false"} 被当成真。标准答案强制取数据库题目，不采用模型另写的一份。mock 只根据字面与数值比对生成步骤诊断，不推断学生方法，因此该字段保持空值。
+
+真实 Provider 当前先取得结构结果，再将渲染评语按 8--20 字分片推送。mock 采用相同分片逻辑并标记 \env{mock-simulated-stream}，明确不是模型 token 流。通用 Provider 层仍保留 OpenAI 兼容 SSE 的增量解析与测试。若模型请求或 JSON 解析失败，批改回退本地规则并标 \env{json-fallback}；若旧式流式路径中途失败，前端先清除残片，再显示完整回退文本。流式改善等待体验，但不作为正确性的证据。
+
+\subsection{SSE 事件、数据模型与跨重启回放}
+
+一次动作对应一个 \env{run_id}，事件包含 Agent、阶段、消息、负载和时间。阶段覆盖排队、运行、增量、完成、驳回、错误和耗尽降级通知。HTTP 先建运行再启动协程，订阅者从历史起点补发，避免早期事件丢失。
+
+业务异常统一转成 \env{orchestrator/error}，\env{finally} 必定关闭运行。服务端每 15 秒保活；前端上传、生成和其他动作的等待上限分别为 600、300、120 秒。超时只停止前端等待，不代表服务端任务已经取消。
+
+\begin{figure}[H]
+\centering
+\resizebox{0.97\textwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=8mm and 10mm,
+  entity/.style={draw=ink!60,fill=palegreen,rounded corners=2pt,align=left,font=\small,minimum width=3.25cm,minimum height=1.2cm,inner sep=6pt},
+  bus/.style={draw=amber!70,fill=amber!8,rounded corners=3pt,align=center,font=\small,minimum width=3.2cm,minimum height=1.25cm},
+  arr/.style={-{Stealth[length=2.2mm]},draw=muted,thick},
+  rel/.style={font=\scriptsize,text=muted,fill=white,inner sep=1pt}
+]
+\node[entity] (source) {\textbf{source}\\原图路径 / raw\_json\\归档名 / 创建时间};
+\node[entity,right=of source] (card) {\textbf{card}\\标题 / 摘要 / 正文\\标签 / 公式 / 计数};
+\node[entity,right=of card] (question) {\textbf{question}\\题干 / 答案 / 来源卡\\verify\_log / verify\_level};
+\node[entity,below=1.25cm of card] (revision) {\textbf{card\_revision}\\字段 / 旧值 / 新值\\与卡片更新同事务};
+\node[entity,below=1.25cm of question] (attempt) {\textbf{attempt}\\用户作答 / 正误\\错误摘要 / 时间};
+\node[bus,below=1.25cm of source] (run) {\textbf{EventBus}\\run\_id / 内存历史\\500 条上限 / 15 s 保活};
+\node[entity,below=1.25cm of run] (event) {\textbf{agent\_event}\\phase / message+payload\\最近 200 个 run};
+\node[entity,right=of event] (embedding) {\textbf{card\_embedding}\\card\_id / model / vector\\懒计算 / 换模型重嵌};
+\draw[arr] (source) -- node[rel,above]{1:N} (card);
+\draw[arr] (card) -- node[rel,above]{N:M，ID 数组} (question);
+\draw[arr] (card) -- node[rel,right]{真实字段变化} (revision);
+\draw[arr] (question) -- node[rel,right]{1:N} (attempt);
+\draw[arr] (run) -- node[rel,right]{publish 同事务外容错写入} (event);
+\draw[arr] (card.south west) to[bend right=25] node[rel,left]{hybrid 懒缓存} (embedding.north);
+\draw[arr] (run.north) to[bend left=18] node[rel,left]{SSE / 迟到补发} (source.south);
+\end{tikzpicture}}
+\caption{核心数据模型与事件流。业务实体保存学习材料，事件表保存运行过程，向量缓存与主卡片分离，修订记录和卡片更新保持事务一致。}
+\label{fig:data-event}
+\end{figure}
+
+事件在发布时同时写 \env{agent_event}，负载中分别保留消息和结构数据。写库异常被隔离，只影响回放，不影响实时流。前端重试先使用原运行号读取内存历史；如果没有事件，再请求 \env{GET /api/runs/{run_id}/events}；数据库也没有记录时才重新 POST。原生 EventSource 的自动重连被关闭，因为不受控重连可能把历史再次追加到当前界面。显式恢复顺序更容易保证只渲染一次结局。
+
+\subsection{中文检索、向量缓存与 RRF 融合}
+
+缺省检索对中文生成 2-gram，短查询保留整串，英文按空白补词。标题、标签、摘要、正文权重为 2.0、1.5、1.0、1.0，长 token 加权，低于 2.0 的候选返回空，避免给任意问题硬凑出处。
+
+混合模式把卡片文本发送到兼容嵌入端点，向量按卡片懒缓存，换模型重嵌。返回条数、维度和有限数均校验，SQLite 查询按 900 变量分块。当前规模用 Python 计算余弦，不引入 sqlite-vec。
+
+两路结果使用倒数排名融合。若某卡片在规则路排名第 \(r_l\)，向量路排名第 \(r_v\)，融合分可写为
+\[
+  S(c)=\frac{1}{60+r_l(c)}+\frac{1}{60+r_v(c)},
+\]
+未出现在某一路的卡片不获得该路分数。常数 60 减弱头部名次的剧烈差异，让两路共同认可的卡片优先。向量余弦低于 0.35 的候选先被过滤，再进入融合。最后截取前三条，只在规则路命中且超出向量语料上限的卡片不会因向量阶段而消失。
+
+嵌入配置、协议或缓存异常均退回 legacy 并记录事件，因此离线演示不能获得 hybrid 的命中率。检索只负责选材料，回答仍须遵守无材料不编造，引用由召回卡片兜底。
+
+\subsection{参数化讲解、函数图与知识谱系}
+
+讲解 Agent 返回模板名、五个数值参数与短脚本。当前界面只实现二次函数滑块模板，\env{template} 仍是扩展位，尚未建立通用模板注册表。后端把参数收敛为有限浮点数，缺字段、NaN 或反向区间时不传参数；前端再次校验，失败则只显示文字。坐标轴纵范围固定，拖动参数时不自动缩放，以免视觉变化被缩放抵消。系数过大导致曲线出界是已知取舍。
+
+自由函数图使用自写词法分析与递归下降解析。表达式按项、因子、一元表达式和幂分层处理，幂右结合，支持隐式乘法、常用三角与对数函数、绝对值、常数 \env{pi} 和 \env{e}。解析结果是闭包树，逐点求值，不调用 JavaScript \env{eval}。定义域外或非有限值返回断笔，解析错误显示文字。纵轴采用采样绝对值的 P90 再乘 1.25，并设显示上限，减少极点把其他曲线压平的问题。
+
+知识谱系以卡片为节点、共享标签为边。覆盖率超过 40\% 的泛化标签只展示不建边，防止所有节点被学科大词连成密团。过滤后没有边时，同来源卡片按 ID 串成链。出题交付和追问命中分别更新计数，同一批交付中同一张卡只计一次，计数失败不影响主任务。节点大小与颜色只表达使用频率，不代表掌握程度或能力评价。
+
+\subsection{桌面打包、运行性能与错误呈现}
+
+PyInstaller 收集后端与 Python 运行时，Electron 加载前端并管理进程。v0.1.6 用 \env{YIZHI_ENV_FILE} 指向可执行文件旁的 \file{.env}，数据目录独立指向用户可写位置。便携版等待主要来自自解压，目录版是演示主路径，具体实测见第 1 节。
+
+后端采用单 uvicorn worker，不同 run 可并行，同一 run 内串行。SQLite 使用 WAL 和短连接，未做并发压测；内存看板也不能直接扩展到多 worker。
+
+错误分为网络、参数、业务运行和外部依赖四层。前端优先读取 FastAPI 的 \env{detail}，超过 240 字符的错误体会截断。错误横幅同时给出失败动作与重试入口。上游 HTTP 异常不会在 Provider 层无限自动重试，避免限流时进一步增加请求量。
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{401、429、503 及相关故障的当前处理口径}
+\begin{tabularx}{\textwidth}{@{}L{1.8cm}L{4.2cm}Y@{}}
+\toprule
+\textbf{状态或故障} & \textbf{当前路径} & \textbf{用户结果与未实现部分} \\
+\midrule
+401 & 真实模型上游鉴权失败，\env{raise_for_status} 转为异常 & 生成等任务进入运行错误；批改可回退本地规则。作品本身无登录体系，401 不是本地用户鉴权功能；当前没有专门的自动换 Key 逻辑 \\
+429 & 上游速率限制或配额不足，作为 HTTP 异常处理 & 显示失败步骤与上游错误摘要，不在 Provider 内自动密集重试；批量演示应降低题量或换已验证配置。指数退避与配额调度未实现 \\
+503 & 上游服务不可用或本地接口返回不可用 & 前端 \env{STATUS_HINT} 将 503 翻译为“后端不可用”，保留详情；SSE 断流按回放顺序恢复，不把 503 静默改成 mock \\
+400/404/413/422 & 本地参数、资源与上传限制 & 映射为请求参数、资源不存在、内容超限或校验失败，并优先显示服务端 \env{detail} \\
+网络 status 0 & 浏览器 \env{fetch} 自身失败 & 提示无法连接后端，与 HTTP 业务错误区分 \\
+模型超时或坏 JSON & Provider 异常或解析失败 & 生成任务明确报错；批改回退本地规则；KaTeX 与讲解参数另有局部降级 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+这里刻意区分“错误可读”与“错误已恢复”。401 和 429 目前主要是可读、可定位，并没有自动修复能力。503 的提示映射也不等于上游已经恢复。将所有异常都静默回退 mock 会破坏真实性，因此只有声明过的局部能力，例如批改规则、检索基线和结构检查，才执行明确标记的降级。
+
+\subsection{风险与边界}
+
+当前版本的风险不只来自模型准确率。单用户无鉴权、上传文件长期累积、文档截断、单 worker 状态和第三方许可都属于交付边界。下表把风险与已经采取的处置分开，未完成的措施不写成现有能力。
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{主要风险、现有对策与剩余影响}
+\begin{tabularx}{\textwidth}{@{}L{2.6cm}Y L{4.1cm}@{}}
+\toprule
+\textbf{风险} & \textbf{已有控制} & \textbf{剩余边界} \\
+\midrule
+模型输出注入数学解析 & 字符、名称、代入、幂结构白名单；攻击与副作用回归 & 白名单之外的资源消耗形式仍需持续评审，不能宣称形式化安全 \\
+识别或萃取错误传播 & 原始块可查、卡片可改、修订留痕、不确定内容不猜 & 手写和复杂版面准确率依赖上游，没有真实大样本统计 \\
+结构合格被误读为正确 & 三级字段、界面徽章、日志和结束事件同步 & 用户仍需理解结构检查不证明内容；开放题未覆盖 \\
+真实模型不可用 & 健康检查、明确错误、局部规则回退、离线 mock 复现 & mock 不代表真实识别；401/429 无自动修复；现场网络仍影响真实演示 \\
+断流导致重复操作 & 原运行内存重放、落库事件恢复、最后才重新 POST & 历史保留有限；极端情况下记录已清理仍可能需重新执行 \\
+本地服务被误作公网服务 & 默认绑定 127.0.0.1，CORS 仅本地开发源，桌面数据本地保存 & 无登录、用户隔离和配额，不可直接班级化或公网开放 \\
+长文档与资源占用 & 后缀和大小限制、前 3 页、2 万字、题量和表达式上限 & 长讲义被截断；上传目录缺自动生命周期管理；未做高并发压测 \\
+桌面安全与许可 & 提供哈希、CSP、许可与 NOTICE；源码公开可核对 & 未签名，体积大；PyMuPDF 的 AGPL 义务随二进制保留 \\
+学习效果被过度解释 & 谱系只统计出题和被问，文档标明构造集与样本来源 & 无真实用户对照，不宣称提高成绩或形成完整认知诊断 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+这些边界决定作品目前的合理定位：一个可公开复现的个人学习工具骨架，核心链路和质量机制已有实现与测试，真实模型已做有限联调，但还不是经过大规模用户验证的成熟教学平台。后续优先级应是扩大真实讲义评测、补组件与真实 Provider 回归、完善模板路由和检索规模测试，而不是先增加更多页面或角色。
