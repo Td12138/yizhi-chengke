@@ -323,38 +323,18 @@ class ReviewAgent(Agent):
         关键词/数值比对，不依赖模型。
         """
         local = fixtures.mock_review(question, user_answer)
-        buffer = ""
+        # 真实模型的输出是 JSON：直接流式吐出去，界面会把 `{"score": ...}` 原样显示。
+        # 所以先拿结构化结果，再按片推送「人话版」评语（分片显示，等价于流式观感）。
         try:
-            async for piece in llm.chat_stream("review", payload):
-                buffer += piece
-                # 留够「一个标准片 + 一个下限片」再切：末片因此必然落在 8–19 字
-                while len(buffer) >= CHUNK_MIN_CHARS + CHUNK_SIZE:
-                    chunk, buffer = buffer[:CHUNK_SIZE], buffer[CHUNK_SIZE:]
-                    await self._emit_chunk(chunk)
-            if buffer:
-                await self._emit_chunk(buffer)
-        except Exception as exc:  # 网络抖动/协议不符：降级，不把整次批改搞挂
-            await self.emit(
-                "delta",
-                f"流式不可用（{type(exc).__name__}: {exc}），已回退一次性批改",
-                notice="stream-fallback",
-            )
-            # 中断前吐出的半句已经发给前端了，但最终文本必须只算回退后的完整评语，
-            # 否则 result["text"] 会变成「半句 + 完整评语」的拼接怪
-            self.streamed = ""
             raw = await llm.chat_json("review", payload)
-            review = coerce_review(raw, question, base=local)
-            await self._emit_all(render_review_text(review), config.CHUNK_PACE_SECONDS)
-            return review
-
-        parsed = _extract_json(self.streamed)
-        if parsed is None:
+        except Exception as exc:  # 网络抖动 / 模型胡写：降级到本地规则，不让整次批改失败
             await self.emit(
                 "delta",
-                "模型未按约定输出结构化 JSON，结构化字段已回退本地规则",
-                notice="parse-fallback",
+                f"模型批改不可用（{type(exc).__name__}: {exc}），已回退本地规则",
+                notice="json-fallback",
             )
-            raw = local
+            review = coerce_review(local, question, base=local)
         else:
-            raw = parsed
-        return coerce_review(raw, question, base=local)
+            review = coerce_review(raw, question, base=local)
+        await self._emit_all(render_review_text(review), config.CHUNK_PACE_SECONDS)
+        return review

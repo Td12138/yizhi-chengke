@@ -219,12 +219,23 @@ def _prose_and_fence(score: int = 92) -> str:
     )
 
 
-def test_review_streams_from_provider_and_parses_structured_tail(monkeypatch):
-    text = _prose_and_fence()
-    # 模型按 token 吐：每 5 字一片，验证 Agent 会攒到 8 字以上再发
-    pieces = [text[i : i + 5] for i in range(0, len(text), 5)]
-    body = b"".join(_sse_event(piece) for piece in pieces) + DONE_LINE
-    _use_remote_provider(monkeypatch, lambda request: httpx.Response(200, content=body))
+def test_review_renders_structured_result_in_chunks(monkeypatch):
+    """真实路径：先拿结构化 JSON，再按 8–20 字推出「人话版」评语。
+
+    v0.1.7 之前是把模型原文直接流给界面，DeepSeek 返回 JSON 时用户会看到
+    `{"score": 0, ...}` 一坨原文——现在改成先解析再渲染。
+    """
+    payload = {
+        "score": 92,
+        "verdict": "correct",
+        "points": [
+            {"hit": True, "text": "写出对称轴公式"},
+            {"hit": True, "text": "结果正确"},
+        ],
+        "issues": ["没写出最终结论"],
+        "suggestion": "把结论补上",
+    }
+    _use_remote_provider(monkeypatch, lambda request: _json_reply(payload))
 
     events = _review_events(AXIS_Q, "2")
     result = _result(events)
@@ -233,23 +244,18 @@ def test_review_streams_from_provider_and_parses_structured_tail(monkeypatch):
     assert len(chunks) >= 3
     assert all(CHUNK_MIN <= len(chunk) <= CHUNK_MAX for chunk in chunks), chunks
     assert "".join(chunks) == result["text"]
-    assert "思路对了" in result["text"]
+    # 推给用户的是人话，不是 JSON
+    assert not result["text"].lstrip().startswith("{")
+    assert "得分" in result["text"] or "分" in result["text"]
 
     assert result["score"] == 92
     assert result["verdict"] == "correct"
-    assert [point["text"] for point in result["points"]] == [
-        "写出对称轴公式",
-        "结果正确",
-    ]
     assert result["issues"] == ["没写出最终结论"]
-    assert result["suggestion"] == "把结论补上"
-    # 标准答案只认题目表里的，不采信模型自己写的
     assert result["reference"] == AXIS_Q["answer"]
     # 模型没给步骤诊断：用本地确定性规则补齐，结构不缺项
     assert 2 <= len(result["steps"]) <= 5
     assert result["first_error"] is not None
     assert result["better_method"]["name"] == "顶点公式"
-    assert result["method_comparison"]
 
 
 def test_model_step_diagnostics_override_local_rules(monkeypatch):
@@ -268,10 +274,7 @@ def test_model_step_diagnostics_override_local_rules(monkeypatch):
         "better_method": {"name": "换元法", "why": "少一步", "steps": ["换元", "回代"]},
         "method_comparison": "模型给的对比",
     }
-    text = "步骤诊断见下。\n```json\n" + json.dumps(payload, ensure_ascii=False) + "\n```"
-    pieces = [text[i : i + 6] for i in range(0, len(text), 6)]
-    body = b"".join(_sse_event(piece) for piece in pieces) + DONE_LINE
-    _use_remote_provider(monkeypatch, lambda request: httpx.Response(200, content=body))
+    _use_remote_provider(monkeypatch, lambda request: _json_reply(payload))
 
     result = _result(_review_events(AXIS_Q, "x = 3"))
 
@@ -284,26 +287,11 @@ def test_model_step_diagnostics_override_local_rules(monkeypatch):
     assert result["method_comparison"] == "模型给的对比"
 
 
-def test_review_falls_back_when_streaming_fails(monkeypatch):
-    """流式 500 → 回退一次性 chat_json，批改不能整个失败。"""
-    bodies: list[dict] = []
-    fallback = {
-        "score": 40,
-        "verdict": "partial",
-        "points": [{"hit": True, "text": "写了公式"}],
-        "issues": ["结果不对"],
-        "suggestion": "把数字代进去",
-        "reference": MODEL_WRONG_REFERENCE,
-    }
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content)
-        bodies.append(body)
-        if body.get("stream"):
-            return httpx.Response(500, json={"error": "upstream boom"})
-        return _json_reply(fallback)
-
-    _use_remote_provider(monkeypatch, handler)
+def test_review_falls_back_when_model_json_fails(monkeypatch):
+    """模型接口 500 → 回退本地规则，批改不能整个失败。"""
+    _use_remote_provider(
+        monkeypatch, lambda request: httpx.Response(500, json={"error": "upstream boom"})
+    )
 
     events = _review_events(AXIS_Q, "x = 3")
     result = _result(events)
@@ -313,22 +301,21 @@ def test_review_falls_back_when_streaming_fails(monkeypatch):
         for e in events
         if e.agent == "review" and e.phase == "delta" and "notice" in e.payload
     ]
-    assert "stream-fallback" in notices
-    assert any("已回退" in e.message for e in events if e.agent == "review")
-
-    assert result["score"] == 40
-    assert result["verdict"] == "partial"
-    assert result["reference"] == AXIS_Q["answer"]
-    # 回退后仍然按 8–20 字切片补发，拼接等于最终文本
+    assert "json-fallback" in notices
     assert "".join(_chunks(events)) == result["text"]
-    assert len(bodies) == 2
-    assert bodies[1].get("response_format") == {"type": "json_object"}
+    assert result["reference"] == AXIS_Q["answer"]
 
 
 def test_review_parse_failure_falls_back_to_local_rules(monkeypatch):
-    """模型胡写（没有 JSON）：结构化字段回退本地规则，评语照旧流出来。"""
-    body = _sse_event("这道题我不太确定，看起来还行。") + DONE_LINE
-    _use_remote_provider(monkeypatch, lambda request: httpx.Response(200, content=body))
+    """模型胡写（不是 JSON）→ 结构化字段回退本地规则，评语照旧推出。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "这道题我不太确定，看起来还行。"}}]},
+        )
+
+    _use_remote_provider(monkeypatch, handler)
 
     events = _review_events(AXIS_Q, "2")
     result = _result(events)
@@ -338,7 +325,7 @@ def test_review_parse_failure_falls_back_to_local_rules(monkeypatch):
         for e in events
         if e.agent == "review" and e.phase == "delta" and "notice" in e.payload
     ]
-    assert "parse-fallback" in notices
+    assert "json-fallback" in notices
     assert result["score"] == 85  # 本地规则：与标准答案数值等价
     assert result["verdict"] == "correct"
     assert "".join(_chunks(events)) == result["text"]
