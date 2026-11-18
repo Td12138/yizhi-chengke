@@ -1,7 +1,7 @@
 % !TEX program = xelatex
 \documentclass[11pt,a4paper,fontset=windows]{ctexart}
 
-\usepackage[top=2.3cm,bottom=2.3cm,left=2.3cm,right=2.3cm,headheight=22pt]{geometry}
+\usepackage[top=2.5cm,bottom=2.4cm,left=2.4cm,right=2.4cm]{geometry}
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{booktabs}
@@ -13,42 +13,25 @@
 \usepackage{float}
 \usepackage{titlesec}
 \usepackage{fancyhdr}
-\usepackage[most]{tcolorbox}
+\usepackage{tcolorbox}
 \usepackage{listings}
-\usepackage{tikz}
-\usetikzlibrary{positioning,arrows.meta,calc,shapes.geometric,fit,backgrounds}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
-\usepackage{amsmath}
-\usepackage{etoolbox}
-\AtBeginEnvironment{longtable}{\footnotesize}
-\usepackage[hidelinks,unicode]{hyperref}
+\usepackage[hidelinks]{hyperref}
 
 \definecolor{ink}{HTML}{1F4D3A}
 \definecolor{inklight}{HTML}{3C6E57}
 \definecolor{sand}{HTML}{F3EEE3}
 \definecolor{line}{HTML}{D8D0C0}
 \definecolor{muted}{HTML}{6B6459}
-\definecolor{palegreen}{HTML}{E8F0EA}
-\definecolor{warn}{HTML}{A34A32}
-\definecolor{amber}{HTML}{B8842F}
 
-\captionsetup{font=small,labelfont=bf,labelsep=quad,skip=5pt}
+\captionsetup{font=small,labelfont=bf,labelsep=quad}
 \renewcommand{\figurename}{图}
 \renewcommand{\tablename}{表}
-\renewcommand{\lstlistingname}{代码清单}
-\renewcommand{\arraystretch}{1.14}
-\setlength{\tabcolsep}{4.5pt}
-\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
-\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
-\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 
 \titleformat{\section}{\Large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\large\bfseries\color{inklight}}{\thesubsection}{0.7em}{}
 \titleformat{\subsubsection}{\normalsize\bfseries\color{inklight}}{\thesubsubsection}{0.6em}{}
-\titlespacing*{\section}{0pt}{15pt}{7pt}
-\titlespacing*{\subsection}{0pt}{11pt}{5pt}
-\titlespacing*{\subsubsection}{0pt}{8pt}{3pt}
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
 
 \pagestyle{fancy}
 \fancyhf{}
@@ -58,167 +41,572 @@
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{line}\leaders\hrule height \headrulewidth\hfill}}
 
-\setlength{\parskip}{0.28em}
+\setlength{\parskip}{0.45em}
 \setlength{\parindent}{2em}
-\linespread{1.30}
-\setlist[itemize]{leftmargin=2em,itemsep=2.5pt,topsep=3pt}
-\setlist[enumerate]{leftmargin=2.2em,itemsep=2.5pt,topsep=3pt}
-\setlength{\emergencystretch}{2em}
+\linespread{1.32}
+\setlist[itemize]{leftmargin=2em,itemsep=2pt,topsep=3pt}
+\setlist[enumerate]{leftmargin=2em,itemsep=2pt,topsep=3pt}
 
 \newcommand{\env}[1]{\texttt{\detokenize{#1}}}
-\newcommand{\file}[1]{\nolinkurl{#1}}
+\newcommand{\file}[1]{\texttt{\detokenize{#1}}}
 \newcommand{\good}[1]{\textcolor{ink}{\textbf{#1}}}
-\newcommand{\repo}{\url{https://github.com/Td12138/yizhi-chengke}}
 
 \lstset{
   basicstyle=\ttfamily\small,
   breaklines=true,
-  breakatwhitespace=false,
   columns=fullflexible,
   frame=single,
   rulecolor=\color{line},
   backgroundcolor=\color{sand},
   keywordstyle=\color{ink}\bfseries,
   commentstyle=\color{muted},
-  stringstyle=\color{inklight},
   showstringspaces=false,
-  xleftmargin=0.7em,
-  xrightmargin=0.7em,
-  aboveskip=0.8em,
-  belowskip=0.8em,
-  captionpos=b,
-  extendedchars=false
-}
-\lstdefinelanguage{json}{
-  basicstyle=\ttfamily\small,
-  showstringspaces=false,
-  breaklines=true,
-  morestring=[b]",
-  literate=*{0}{{{\color{inklight}0}}}{1}{1}{{{\color{inklight}1}}}{1}
-    {2}{{{\color{inklight}2}}}{1}{3}{{{\color{inklight}3}}}{1}
-    {4}{{{\color{inklight}4}}}{1}{5}{{{\color{inklight}5}}}{1}
-    {6}{{{\color{inklight}6}}}{1}{7}{{{\color{inklight}7}}}{1}
-    {8}{{{\color{inklight}8}}}{1}{9}{{{\color{inklight}9}}}{1}
+  xleftmargin=0.6em,
+  xrightmargin=0.6em,
+  aboveskip=0.6em,
+  belowskip=0.6em
 }
 
 \newtcolorbox{keybox}[1][]{
-  enhanced,breakable,colback=sand,colframe=line,boxrule=0.5pt,arc=2pt,
-  left=8pt,right=8pt,top=6pt,bottom=6pt,
-  fonttitle=\bfseries\color{ink},title=#1
-}
-\newtcolorbox{warnbox}[1][]{
-  enhanced,breakable,colback=warn!5,colframe=warn!45,boxrule=0.5pt,arc=2pt,
-  left=8pt,right=8pt,top=6pt,bottom=6pt,
-  fonttitle=\bfseries\color{warn},title=#1
+  colback=sand, colframe=line, boxrule=0.5pt, arc=2pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  fonttitle=\bfseries\color{ink}, title=#1
 }
 
 \begin{document}
 
-% 封面
+% ================= 封面 =================
 \begin{titlepage}
 \thispagestyle{empty}
-\begin{tikzpicture}[remember picture,overlay]
-  \fill[ink] (current page.north west) rectangle ([yshift=-10.5cm]current page.north east);
-  \fill[sand] ([yshift=-10.5cm]current page.north west) rectangle ([yshift=-10.72cm]current page.north east);
-  \node[anchor=north west,text=white,align=left] at ([xshift=2.0cm,yshift=-1.45cm]current page.north west) {
-    {\small 全国大学生计算机应用能力与数字素养大赛}\\[3pt]
-    {\small 暨第九届传智杯全国大学生数智创新与 AI 应用大赛}
-  };
-  \node[anchor=north west,text=white,align=left] at ([xshift=2.0cm,yshift=-3.05cm]current page.north west) {
-    {\fontsize{48}{54}\selectfont\bfseries 一纸成课}\\[7pt]
-    {\fontsize{22}{28}\selectfont Paper2Lesson}
-  };
-  \node[anchor=north west,text=white!92,align=left] at ([xshift=2.0cm,yshift=-6.65cm]current page.north west) {
-    {\Large 作品介绍文档}\\[9pt]
-    {\large 拍下一页纸，生成可追问、可练习、可讲解、可批改的课程}\\[7pt]
-    {\normalsize 符号验算 · 分步诊断 · 带出处的检索 · 七 Agent 可观测编排}
-  };
-  \node[anchor=north east,text=white,align=right] at ([xshift=-2.0cm,yshift=-8.95cm]current page.north west) {
-    {\small AI 创新应用挑战赛（个人赛 / 技术应用赛）}
-  };
-\end{tikzpicture}
+\setlength{\parindent}{0pt}
+\begin{flushleft}
+{\small\color{muted}全国大学生计算机应用能力与数字素养大赛\\[2pt]
+暨第九届传智杯全国大学生数智创新与 AI 应用大赛}
+\end{flushleft}
 
-\vspace*{10.15cm}
-\begin{center}
-  \includegraphics[width=0.72\textwidth,height=7.0cm,keepaspectratio]{img/c03.png}
-\end{center}
+\vspace{2.2cm}
+
+{\color{ink}\rule{\textwidth}{2.2pt}}
+
+\vspace{0.8cm}
+{\fontsize{42}{48}\selectfont\bfseries\color{ink} 一纸成课\par}
+\vspace{0.25cm}
+{\fontsize{20}{26}\selectfont\color{inklight} Paper2Lesson\par}
+
+\vspace{0.9cm}
+{\Large 作品介绍文档\par}
+\vspace{0.3cm}
+{\large\color{muted} 拍下一页纸，把它变成可追问、可练习、可讲解的课\par}
+\vspace{0.5cm}
+{\normalsize\color{inklight} 7 个 Agent · 卡片 → 出题 → 验算 → 批改 → 讲解 · 0 Key 可跑\par}
+
+\vspace{0.7cm}
+{\color{ink}\rule{\textwidth}{0.8pt}}
+
 \vfill
-\begin{center}
-\small
-\begin{tabularx}{0.94\textwidth}{@{}>{\bfseries\color{ink}}L{2.3cm}Y@{}}
+
+\begin{tabularx}{\textwidth}{@{}>{\color{muted}}p{2.6cm}X@{}}
 \toprule
 作品版本 & v0.1.6 \\
+参赛赛道 & AI 创新应用挑战赛（个人赛 / 技术应用赛） \\
 作品形态 & Windows 免安装桌面版、单文件便携版、Web 源码 \\
-代码仓库 & \repo \\
-开源许可 & 源码 MIT；桌面二进制含 AGPL 组件，许可义务见附录 B \\
-文档日期 & 2026 年 11 月 18 日 \\
+代码仓库 & \url{https://github.com/Td12138/yizhi-chengke} \\
+开源许可 & 源码 MIT；桌面二进制含 AGPL 组件，见 \file{THIRD_PARTY_NOTICES.md} \\
+配套材料 & 技术文档（30 页）、演示视频（5 分 44 秒，1080p）、AI 对话快照 \\
 \bottomrule
 \end{tabularx}
-\end{center}
+
+\vspace{1.2cm}
+{\color{muted} 2026 年 11 月}
 \end{titlepage}
 
-% 文档信息表
+% ================= 摘要 =================
 \pagenumbering{Roman}
-\section*{文档信息}
-\addcontentsline{toc}{section}{文档信息}
+\section*{作品摘要}
+\addcontentsline{toc}{section}{作品摘要}
+
+手机相册里存着几千张板书、试卷和错题本，真正复习时却一张也找不到。扫描类工具和公式识别服务已经能把图片转成文字，甚至转成漂亮的 LaTeX，但转完就结束了：题目还要自己找，做错了还要自己琢磨。一纸成课补的是识别之后的那一段路。
+
+作品把一页纸拆成可编辑的知识点卡片，再沿着卡片出题、验算、作答、判分、批改、讲解和追问。生成题目不是“模型说了算”，而是由 sympy 独立代入验算，不通过就驳回重生成；批改不是一句“错了”，而是指出第几步出错、为什么错、更优解法是什么；追问不是自由发挥，而是先召回卡片原文，答案下面必须挂出处。整条链路由七个 Agent 通过事件总线协作，状态实时推到界面，断流后还能按 \env{run_id} 回放。
+
+作品默认以 mock 模式运行，不需要任何 API Key 就能走完整条链路，方便评委复现；接入智谱 \env{glm-4v-flash} 与 DeepSeek 官方 \env{deepseek-chat} 后，同一套界面处理真实拍照与真实模型输出。交付形态包括解压即用的 Windows 桌面版、单文件便携版和可公开复现的源码。
+
+本文档按赛事要求介绍项目详情与使用方式、项目亮点、AI 测试技术落地情况、关键技术、项目图片、发表与获奖情况以及原创性说明。代码与全部材料见 \url{https://github.com/Td12138/yizhi-chengke}。
+
+\clearpage
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+% ================= 1 =================
+\section{项目详情与使用方式}
+
+\subsection{背景：识别之后还是空白}
+
+板书和试卷是最常见的知识载体，也是最难检索的载体。拍照存进相册之后，它们就变成了几千张没有索引的图片：想找一道题要翻半天，想问一句“这一步为什么这么变形”没有人回答，想练同类题只能自己再找。
+
+现有的公式识别工具解决的是“看清”和“转写”。以 Mathpix 为代表的服务能把整页公式转成 LaTeX，准确率已经很高；扫描类 App 能把纸面拉直、去阴影、导出 PDF。但它们的产品边界停在文字：转完即结束，不关心学生接下来要做什么。真正耗时间的是后面几件事：把一页内容拆成知识点、围绕知识点出题、判断答案对不对、答错之后讲清楚。
+
+一纸成课从这段空白切入。它不重复造 OCR，而是把识别结果继续组织成卡片，再用卡片驱动出题、练习、批改和讲解。
+
+\subsection{作品是什么}
+
+一纸成课是一套面向学生个人的纸面知识整理与练习工具。输入是一页纸（拍照、图片、PDF 或 DOCX），输出是一组可编辑的知识卡片、一份经过验算的练习卷、逐题批改与讲解，以及一张随时间生长的知识谱系。
+
+\begin{keybox}[一句话概括]
+拍下任何一页纸——板书、试卷、讲义、错题本——系统把它变成可追问、可练习、可讲解的交互式课程。
+\end{keybox}
+
+作品的核心不是某一次模型调用，而是一条闭环：识别 → 卡片 → 出题 → 验算 → 作答 → 批改 → 讲解 → 追问 → 谱系。闭环里的每一步都能被用户看见，也都能被测试复现。
+
+\subsection{完整链路}
+
+\begin{enumerate}
+  \item \textbf{纸面输入}：摄像头拍照、选择图片，或上传 PDF / DOCX。拍照时最长边压到 1920 像素，选择文件保留原图，单图上限 12 MB。
+  \item \textbf{版面识别}：视觉模型把整页切成标题、公式、正文、表格等版面块；无法确定的内容标为“无法识别”，不猜。
+  \item \textbf{卡片萃取}：语言模型把版面块整理成标题、摘要、公式、正文四类字段，写入本地卡片库。识别错了可以点“编辑”修正，修改前后值留痕。
+  \item \textbf{一句话出题}：用自然语言描述需求（例如“出 5 道二次函数的题，难度递进”），命题 Agent 逐条生成带 KaTeX 公式的变式题。
+  \item \textbf{质检回环}：带 \env{verify} 的题由 sympy 代入验算；没有验算式的题做题干、答案、选项、题型四项结构检查。不通过就带原因打回重生成。
+  \item \textbf{作答与判分}：字符串、数值比对之后追加 sympy 等价判定，\env{2=x} 与 \env{x=2}、展开式与因式、分数与等价小数都算对。
+  \item \textbf{AI 批改}：按得分点给分，给出命中要点、分步清单、首个出错步骤、更优解法和流式评语。
+  \item \textbf{讲解与追问}：错题讲解生成可交互函数图；追问先召回卡片原文，答案下面标出处。
+  \item \textbf{知识谱系}：节点大小是出题量，颜色深浅是被问次数，下面是拍过的原图图册。
+\end{enumerate}
+
+\subsection{功能清单}
+
 \begin{table}[H]
 \centering
-\footnotesize
-\caption{作品介绍文档信息表}
-\begin{tabularx}{0.96\textwidth}{@{}L{3.0cm}Y@{}}
+\small
+\begin{tabularx}{\textwidth}{@{}p{3.0cm}X@{}}
 \toprule
-\textbf{项目} & \textbf{内容} \\
+\textbf{环节} & \textbf{已实现能力} \\
 \midrule
-作品名称 & 一纸成课（Paper2Lesson） \\
-参赛赛道 & AI 创新应用挑战赛，个人赛 / 技术应用赛 \\
-核心定位 & 将纸面资料转为知识卡片，再完成命题、验算、练习、批改、讲解与检索 \\
-当前版本 & v0.1.6；本文数字均对应该版本，历史版本数据单独注明 \\
-代码仓库 & \repo \\
-交付形态 & Web 源码、Windows 目录版、单文件便携版 \\
-缺省运行方式 & \env{VLM_PROVIDER=mock}、\env{LLM_PROVIDER=mock}，无 API Key、无网络可复现 \\
-真实联调组合 & 智谱 \env{glm-4v-flash} 负责视觉；DeepSeek 官方 \env{deepseek-chat} 负责文本与批改 \\
-质量基线 & 后端 403 项测试，前端 18 项测试，Playwright 主路径 7/7 \\
-阅读对象 & 赛事评审、复现人员、后续维护者 \\
-写作口径 & 已实现能力与限制分开陈述；构造集结果不外推；不展示密钥与个人信息 \\
+纸面输入 & 摄像头拍照、图片上传；拍照最长边 1920，选择文件保留原图，上限 12 MB \\
+文档输入 & PDF 有文本层时直读；乱码或扫描页在真实视觉模型下渲染成图再识别；DOCX 按段落与表格顺序解析 \\
+知识卡片 & 标题、摘要、公式、正文四字段；人工修正；\env{card_revision} 留痕与历史查看 \\
+练习生成 & 一句自然语言需求生成变式题；逐条流式返回；难度标签与题号 \\
+质量检查 & 符号验算 / 结构检查 / 未验算三级语义；驳回原因可见；最多两轮重试 \\
+作答反馈 & 字符串、数值、sympy 等价判分；得分、命中要点、分步清单、更优解法 \\
+错题讲解 & 按错因生成讲解脚本与可拖参函数图；表达式沙盒自写解析器 \\
+追问 & 召回卡片原文作答并标出处；可选 2-gram + 向量 RRF 混合检索 \\
+知识谱系 & 标签成图；节点大小 = 出题数；颜色 = 被问次数；Top 10 与原图图册 \\
+过程可观测 & 七个 Agent 状态经 SSE 实时推送；事件落库；按 \env{run_id} 回放 \\
+桌面交付 & 免安装目录版、单文件便携版；exe 同级 \file{.env}；零 Key 可运行 \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\subsection*{阅读导航}
-本文保留赛事规定的七个正文标题。第 1 节说明作品边界与使用方式；第 2 节讨论设计价值；第 3 节给出测试证据、评测口径和 AI 协同开发方法；第 4 节解释核心实现；第 5 节展示运行截图；第 6、7 节说明发表获奖与原创性。附录 A、B 分别提供复现步骤和依赖许可；接口、配置与测试矩阵等实现细节见技术文档。需要快速验收时，可先读摘要与第 3 节，再按附录 A 操作。需要核对实现时，可同时查看公开仓库中的同名模块和测试文件。
+\subsection{一次完整使用（约 3 分钟）}
 
-\begin{keybox}[事实与推断的标记方式]
-本文中的“实测”“通过”“命中率”均有对应命令、事件或结果文件。标注“限制”“未覆盖”“构造集”的内容不能用于推断真实用户效果。界面截图来自实际运行，模型能力只按已联调组合陈述。仓库地址在封面、本表和第 6 节重复给出，便于材料脱离正文后仍能溯源。
+以全新安装的桌面版为例，从打开到看到批改结果约 3 分钟：
+
+\begin{enumerate}
+  \item 双击 \texttt{一纸成课.exe}，首次启动出现四步引导，依次说明上传、出题、批改与讲解的位置。点“下一步”看完，或直接“跳过”。
+  \item 在“1·拍一页纸”里点示例板书“二次函数图象”，不拍照也能走完整条链；真实使用时点“打开摄像头”拍一页，或把 PDF / Word 拖进上传区。
+  \item 等右侧看板把识别、萃取、入库跑完，左侧出现知识点卡片。识别错了点卡片右上“编辑”，改完保存。
+  \item 在“3·一句话出题”里输入“出 5 道二次函数的题，难度递进”，点“生成练习卷”。题目逐条出现，先标待验算，验过才亮已验算。
+  \item 任选一题填入答案并提交，先看判分；再点“AI 批改”，看分步清单、出错步骤与更优解法；最后在“4·错题讲解”拖动参数，或在“5·追问”里问一句“为什么这里要配方”。
+\end{enumerate}
+
+全程不需要 API Key。接入真实模型后，识别与批改换成真实输出，操作步骤不变。
+
+\subsection{使用方式一：Windows 桌面版}
+
+Windows 10/11 x64 可直接运行，不需要安装 Python、Node.js，也不需要先配置模型 Key。
+
+\begin{enumerate}
+  \item \textbf{推荐目录版}：解压 \texttt{一纸成课-0.1.6-win64.zip}，双击 \texttt{一纸成课.exe}。窗口约 0.2 秒出现，后端通常 2.5--5.1 秒就绪，界面约 3.9--6.4 秒可交互。
+  \item \textbf{单文件版}：双击 \file{YizhiChengke-0.1.6-portable.exe}。首次自解压约 36--48 秒，期间可能没有窗口，正式演示优先用目录版。
+  \item 没有 \file{.env} 时默认 mock，可体验上传、出题、答错讲解、批改和追问。桌面版读取 exe 同级目录的 \file{.env}，v0.1.6 的单文件版也能正确定位该目录。
+\end{enumerate}
+
+程序未做代码签名，Windows 可能显示 SmartScreen 提示，点“更多信息 → 仍要运行”即可。遇到安全软件拦截时应核对交付包哈希，不建议关闭安全软件。
+
+\subsection{使用方式二：源码模式}
+
+环境要求：Python $\geq$ 3.11，Node.js $\geq$ 18；运行前端单元测试需要 Node.js $\geq$ 22.6。
+
+\begin{lstlisting}[language=bash]
+git clone https://github.com/Td12138/yizhi-chengke.git
+cd yizhi-chengke
+cp .env.example .env          # Windows: copy .env.example .env
+\end{lstlisting}
+
+\file{.env} 必须放在仓库根目录，与 \file{README.md} 同级。零 Key 复现只需确认两项：
+
+\begin{lstlisting}[language=bash]
+VLM_PROVIDER=mock
+LLM_PROVIDER=mock
+\end{lstlisting}
+
+启动后端：
+
+\begin{lstlisting}[language=bash]
+cd apps/server
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8710
+\end{lstlisting}
+
+另开终端启动前端：
+
+\begin{lstlisting}[language=bash]
+cd apps/web
+npm install
+npm run dev
+\end{lstlisting}
+
+访问 \url{http://127.0.0.1:5173}。健康检查地址为 \url{http://127.0.0.1:8710/api/health}，返回 \env{"ready": true} 表示所选 provider 配置完整。选择真实模型但缺少 Key 时会明确显示未就绪，不会静默改用 mock。
+
+\subsection{使用方式三：接入真实模型}
+
+本次实际联调组合为智谱 \env{glm-4v-flash} 负责视觉识别，DeepSeek 官方 \env{deepseek-chat} 负责萃取、命题、讲解和批改。填好 \env{VLM_API_KEY} 与 \env{LLM_API_KEY} 后，核心配置只有三行：
+
+\begin{lstlisting}[language=bash]
+VLM_PROVIDER=glm
+VLM_MODEL=glm-4v-flash
+LLM_PROVIDER=deepseek
+\end{lstlisting}
+
+\env{LLM_MODEL} 留空使用内置 \env{deepseek-chat} 预设，也可显式填写。两个 \env{*_BASE_URL} 留空时使用官方端点。完整模板见 \file{.env.example}，密钥不随仓库或交付包提供。
+
+\subsection{演示前重置}
+
+源码模式在仓库根目录执行：
+
+\begin{lstlisting}[language=bash]
+python apps/server/scripts/reset_demo.py
+\end{lstlisting}
+
+桌面包可双击“一键还原演示状态.cmd”，停止程序并清理数据库、上传原图、日志和引导标记，下次启动恢复全新状态。该脚本已实测：重置后重新打开会弹出四步引导，卡片与题目均为 0。
+
+% ================= 2 =================
+\section{项目亮点}
+
+\subsection{从“识别”走到“学会”}
+
+多数同类工具把“图变文字”当成终点。一纸成课把识别结果变成可修改、可引用、可再次生成练习的卡片，学生可以围绕同一张卡片追问、做题、看讲解。产品价值不在某一次模型输出，而在识别之后那条能走完的路。
+
+\subsection{生成内容必须能被验证}
+
+大模型会一本正经地给出错误答案。作品没有把正确性交给模型自检，而是引入一个只会算数的环节：带 \env{verify} 的题由 sympy 代入验算，期望值对不齐就驳回，命题 Agent 带原因重生成，首轮之后最多再试两次。
+
+没有验算式的题不会被冒充成“已验算”，而是做题干、答案、选项、题型四项结构检查，界面明确标为“结构检查”。结构检查只保证形状完整，不保证内容正确，这一点在界面和文档里都写明。
+
+\begin{keybox}[三级验算语义]
+\env{symbolic}（符号验算，内容正确）· \env{structural}（结构检查，形状完整）· \env{unchecked}（未验算，如实标注）。三者不混用。
 \end{keybox}
 
-\clearpage
-% 摘要，约 1000 字
-\section*{摘要}
-\addcontentsline{toc}{section}{摘要}
+\subsection{反馈能落到步骤}
 
-纸面板书、试卷和错题本便于记录，却不便于再次使用。扫描与公式识别工具可以完成图像转写，但转写后的内容仍需人工整理、找题、核对答案和分析错误。一纸成课面向这一段后续学习过程，把图片、PDF 或 DOCX 输入整理为可编辑知识卡片，再由同一批卡片驱动练习生成、答案判定、分步批改、错因讲解、带出处的追问和知识谱系统计。作品不以识别准确率作为唯一目标，也不训练基础模型。主要工程投入放在生成结果的约束、验证、追溯和失败降级上。
+判分不是简单的字符串相等。系统先做字符串与数值比对，失败后追加 sympy 等价判定：\env{2=x} 与 \env{x=2}、\env{(x-2)(x-3)} 与 \env{x^2-5x+6}、\env{1/2} 与 \env{0.5} 都判对。
 
-系统由七个能力不同的 Agent 组成。识别 Agent 将纸面内容转为结构化版面块，萃取 Agent 形成卡片，命题 Agent 根据自然语言需求生成变式题，质检 Agent 使用 sympy 独立验算，讲解 Agent 输出讲解脚本与函数图参数，检索 Agent 召回卡片原文，批改 Agent 给出分数、得分点和首个错误步骤。Agent 之间不直接调用，数据通过编排器持有的运行上下文传递。每次操作对应一个 \env{run_id}，状态经 SSE 推送并写入 SQLite。断流后可以重放内存事件，服务重启后仍可读取落库事件恢复结局。
+批改则继续往下走：命中哪些得分点、每一步是对是错、第一个错在第几步、为什么错、更优解法是什么。真实文本模型下还会归因学生使用的方法，另一种正确解法会被承认，而不是只认参考答案。
 
-命题与质检之间的反馈回路是主要技术点。模型不仅返回答案，还提交由表达式、代入值和期望值组成的 \env{verify} 账单。质检代码只接受受限数学表达，代入后按 \(10^{-6}\) 容差核算。不能通过的内容带原因返回命题阶段，首轮之后最多重试两次。系统明确区分符号验算、结构检查和未验算三种级别。结构检查只验证题干、答案、题型与选项形状，不被描述为内容正确。数学解析统一经过字符、标识符、代入值和幂结构白名单。独立评审发现的表达式注入问题已经用六类载荷复验，返回值与文件副作用均为预期。
+\subsection{过程可见、可回放}
 
-质量证据包括后端 403 项、前端 18 项自动化测试，以及源码版和打包版各 7 条端到端主路径。构造评测中，15 道答案不自洽题全部被拦截，15 道正确题误驳为 0，5 道结构损坏题全部被拦截。20 个问句与 10 张样例卡片组成的检索集上，2-gram 基线 top-3 命中率为 80\%，本地 BGE-M3 与 RRF 混合检索为 95\%。这些数字只证明相应机制在给定样本上有效，不代表真实模型出题错误率，也不能外推到大型知识库。
+七个 Agent 的状态、输入输出摘要和驳回原因经 SSE 推到前端看板。用户能看见谁在跑、谁把谁驳回了、驳回理由是什么。事件默认落库，断流或服务重启后可按 \env{run_id} 回放，重试优先读取已有事件，减少重复提交。
 
-作品缺省使用 mock Provider，三套自写教学样例经过真实的编排、验算、判分和事件链路，便于无密钥复现。mock 不读取图片语义，只按文件名选择样例。真实联调使用智谱 \env{glm-4v-flash} 和 DeepSeek 官方 \env{deepseek-chat}，验证了识别、出题驳回与重生成、批改路径。Windows 目录版免除 Python 与 Node.js 安装，单文件便携版作为另一种分发形式保留。本文同时列出单用户无鉴权、文档截断、模板路由缺失、真实用户验证不足和模型能力边界。项目源码与复现材料公开于 \repo。
+\subsection{零 Key 也能完整复现}
 
-\clearpage
-{\footnotesize\setlength{\parskip}{0pt}\setcounter{tocdepth}{1}\tableofcontents}
-\setlength{\parskip}{0.28em}
-\clearpage
-\pagenumbering{arabic}
+作品内置 mock 视觉与 mock 语言两套提供方，按上传文件名分流到三套教学样例。没有 API Key 也能从上传走到批改和追问，评委可以在十分钟内看到完整链路。mock 不是“假界面”：它走同一套编排、验算、判分和事件总线，只是模型输出固定。
 
-\input{sections/01-project.tex}
-\input{sections/02-highlights.tex}
-\input{sections/03-testing.tex}
-\input{sections/04-technology.tex}
-\input{sections/05-images.tex}
-\input{sections/06-publications.tex}
-\input{sections/07-originality.tex}
-\input{sections/08-appendices.tex}
+\subsection{知识能够留下来}
+
+卡片修正有历史，追问有出处，函数图可拖动参数，知识谱系统计出题量与被问次数。复习时哪块最薄，一眼能看出来。函数图使用项目自写的表达式解析器和采样器，不调用 \env{eval}，也不依赖大型绘图库。
+
+\subsection{真实模型实测}
+
+演示与联调使用智谱 \env{glm-4v-flash} 做视觉识别、DeepSeek 官方 \env{deepseek-chat} 做萃取、命题、讲解与批改。一次典型运行中，整页识别约 5 秒；首轮 5 道题有 3 道被 sympy 驳回、2 道通过，第二轮全部通过并交付。驳回不是故障，而是质检环节在真实链路上生效的证据。换更强的模型只需改 \file{.env} 三行，代码与界面不动。
+
+\subsection{与同类项目的差异}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}p{3.2cm}XX@{}}
+\toprule
+\textbf{维度} & \textbf{多数同类项目} & \textbf{一纸成课} \\
+\midrule
+生成题目是否正确 & 不验证，模型说了算 & sympy 代入验算，不通过打回重生成 \\
+过程是否可见 & 只给结果 & 七个 Agent 实时看板，谁驳回了谁一眼可见 \\
+没有 Key 能否跑 & 需要 OpenAI / Gemini Key & mock 模式零依赖跑通全链路 \\
+交付形态 & Web 服务 / Docker & Web 源码 + 解压即用的 Windows 桌面版 \\
+知识沉淀 & 错题列表 & 知识点卡片 + 修正历史 + 知识谱系 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ================= 3 =================
+\section{AI 测试技术落地使用情况概述}
+
+\subsection{测试策略}
+
+本作品的测试对象有两类：一类是确定性代码（判分、验算、检索、接口、事件），另一类是不确定的模型输出（识别、命题、批改、讲解）。两类对象用不同方法：前者用单元与接口测试锁死行为，后者用契约、回放、降级和真实链路冒烟控制风险。
+
+测试分四层：
+
+\begin{enumerate}
+  \item \textbf{单元与接口测试}：pytest 覆盖判分等价、三级验算、结构检查、检索融合、编排回环、批改归因、修正留痕、事件落库与 HTTP 接口。
+  \item \textbf{前端单元测试}：Node 自带测试器覆盖上传闸门、流式字段归一、批改结论清洗、事件回放合成。
+  \item \textbf{端到端冒烟}：Playwright 跑七条主路径，源码模式与打包版各跑一遍。
+  \item \textbf{专项评测}：验算拦截、误驳、结构检查、攻击载荷、检索命中率，结果落 JSON。
+\end{enumerate}
+
+\subsection{自动化回归结果}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}p{3.0cm}p{4.4cm}X@{}}
+\toprule
+\textbf{检查项} & \textbf{当前结果} & \textbf{覆盖重点} \\
+\midrule
+后端 pytest & 403 项 / 26 个文件，全绿，约 68 秒 & 判分等价、验算三级、结构检查、检索、编排回环、批改、留痕、事件落库、接口 \\
+前端单元测试 & 18 项，全部通过 & 上传闸门、流式字段归一、批改结论清洗、事件回放合成 \\
+前端构建 & \env{tsc --noEmit} 与 Vite build 通过 & 类型错误与生产构建 \\
+Playwright 冒烟 & 7/7，源码版与打包版各一遍 & 上传、出题回环、答错讲解、追问出处、分步批改、修正留痕、事件回放 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{专项评测与安全复验}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}p{3.6cm}p{4.0cm}X@{}}
+\toprule
+\textbf{指标} & \textbf{实测结果} & \textbf{测试口径} \\
+\midrule
+验算拦截 & 15/15，100\% & 三套样例 15 道题把期望值偏移 +1，构造不自洽答案 \\
+正确题误驳 & 0/15，0\% & 同一批正确题全部放行 \\
+结构检查 & 5/5，100\% & 空题干、空答案、坏选项等无 \env{verify} 的损坏题 \\
+攻击载荷拦截 & 3/3，100\% & \env{__import__}、指数塔等输入进入白名单检查 \\
+独立沙箱脚本 & 6 个载荷全部拒绝，目录零新增文件 & 同时检查返回值与文件副作用 \\
+检索 top-3 & legacy 80\%（16/20）；hybrid 95\%（19/20） & 20 个问句 × 10 张样例卡片，hybrid 用本地 BGE-M3 与 RRF \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+验算题库是为检验拦截能力而构造的，不代表真实模型出题错误率；检索只有 10 张卡片，也不能外推到大型知识库。hybrid 唯一未命中的英文问句保留在结果 JSON 里，没有从评测集中删掉。
+
+独立评审曾发现模型输出直接进入符号解析的注入风险。修复后统一经过 \env{safe_math} 的字符、标识符、代入值和结构白名单；随后补上嵌套幂运算限制与回归用例。安全结论以攻击输入的实际执行和副作用检查为依据，不以代码审阅代替实测。
+
+\subsection{模型输出的契约与降级}
+
+视觉与文本 provider 均可切换 mock 或真实模型。mock 让测试零 Key、可重复；真实链路另做 smoke，避免把样例通过当成真实模型验证。
+
+模型输出统一走 JSON 契约。解析前做三类容错：括号配平后截取完整对象、修复 LaTeX 单反斜杠、去掉尾随逗号。仍不符合契约时降级到本地规则，并在响应里标记 \env{json-fallback}，界面不会把原始 JSON 当评语显示。讲解参数还有服务端归一与前端守卫，非法参数退化为文字讲解。
+
+\subsection{AI 在测试中的角色与边界}
+
+AI 用于补充边界用例、构造对抗输入、提出评审建议，不负责最终判定。所有断言都是确定性条件：坏题必须被驳回、等价表达必须判对、端口被占必须退出、六个载荷必须全部拒绝且目录零文件。AI 生成的用例要改写成明确输入与期望输出，经人工复核后入库，可重复执行。
+
+这样做的好处是测试不依赖模型心情：模型换成更强的版本，回归结果仍然可比；模型输出格式坏了，容错与降级用例会先报警。
+
+\subsection{证据与复现}
+
+\begin{itemize}
+  \item 评测 JSON：\file{scripts/eval-results/}（验算、检索、攻击载荷）
+  \item 后端测试：\file{pytest apps/server/tests -q}
+  \item 前端测试与构建：\file{npm test}、\file{npm run build}
+  \item 端到端：\file{python scripts/e2e_smoke.py --shots ./shots}
+  \item 演示证据：6 分 07 秒 1080p 视频，含真实识别、逐条出题、批改与 AI 协同复现
+\end{itemize}
+
+% ================= 4 =================
+\section{关键技术}
+
+\subsection{总体架构}
+
+后端是 FastAPI + SQLite，前端是 React + TypeScript + Vite，桌面壳是 Electron，打包用 PyInstaller。七个 Agent 由编排器调度，模型负责生成，符号计算、检索与判分由确定性代码负责。各阶段事件通过 SSE 推到前端，并落库供回放。
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}p{3.4cm}X@{}}
+\toprule
+\textbf{Agent} & \textbf{职责} \\
+\midrule
+识别 & 图像 → 版面块（标题 / 公式 / 正文 / 表格 / 手写） \\
+萃取 & 版面块 → 知识点卡片（四字段） \\
+命题 & 一句话需求 → 变式题（含难度与题型） \\
+质检 & sympy 代入验算；无 verify 时做结构检查；不通过驳回 \\
+讲解 & 错因归因，选择可视化模板与参数 \\
+检索 & 追问时召回卡片原文并标出处 \\
+批改 & 分步诊断、得分点、更优解法、流式评语 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{视觉识别与卡片萃取}
+
+视觉模型先输出版面块，再按块类型萃取。识别结果不是一段自由文本，而是带类型、坐标和置信描述的结构化对象；萃取阶段把标题、公式、正文映射到卡片字段，公式保留 LaTeX。无法确定的内容标 \env{[无法识别]}，避免模型编造。
+
+PDF 先用 PyMuPDF 取文本层；文本层乱码或扫描页在真实视觉模型下渲染成图再识别。DOCX 按段落和表格顺序读取，保留公式与列表结构。
+
+\subsection{命题—质检回环}
+
+命题 Agent 按用户需求生成题目，每题包含题干、选项或填空、答案、解析与可选的 \env{verify} 表达式。质检 Agent 不调用语言模型，只做两件事：
+
+\begin{itemize}
+  \item 有 \env{verify}：把答案代入表达式，用 sympy 化简比对期望值；数值不等或无法化简即驳回。
+  \item 无 \env{verify}：检查题干非空、答案非空、选择题选项完整、题型合法；通过标 \env{structural}，不通过同样驳回。
+\end{itemize}
+
+驳回会带上具体原因回到命题 Agent 重生成，首轮加最多两次重试。轮次用尽后只交付通过检查的题；一道都没过才整批拒绝，不入库。
+
+\subsection{AI 批改}
+
+批改要求模型输出结构化 JSON：得分、得分点命中情况、分步清单（每步对错与原因）、首个出错步骤、更优解法、方法归因。服务端先解析 JSON，再按 8--20 字的分片推送渲染文本，前端逐字显示。解析失败时回退本地规则并标记 \env{json-fallback}，不会把原始 JSON 直接展示给学生。
+
+方法归因是真实 provider 下的附加能力：识别学生实际使用的解法，判断是否成立；另一种正确解法会被承认，而不是只认参考答案。
+
+\subsection{安全数学解析}
+
+模型输出和用户输入都可能包含恶意表达式。所有数学表达统一进入 \env{safe_math}：
+
+\begin{itemize}
+  \item 字符白名单：只允许数字、字母、运算符、括号与少量函数名；
+  \item 标识符白名单：拒绝 \env{__import__}、属性访问、下划线标识符；
+  \item 结构限制：限制指数规模与嵌套深度，拒绝指数塔；
+  \item 代入限制：\env{subs} 只接受数值，不接受表达式或符号。
+\end{itemize}
+
+独立复验用六个载荷攻击，全部拒绝，目录零新增文件。随后又补了嵌套幂运算限制与回归用例。
+
+\subsection{检索与出处}
+
+默认检索是 2-gram 字段加权，零依赖、可离线。可选 \env{RETRIEVAL_MODE=hybrid}，把 2-gram 与向量检索用 RRF 融合；嵌入端点故障时自动回退 legacy，追问不会因为端点挂掉而失败。向量结果设 0.35 的余弦相似度下限，不为凑满三条返回无关出处。
+
+\subsection{函数图与表达式解析}
+
+函数图没有调用绘图库，而是自写解析器：把表达式解析成语法树，按定义域采样，处理极点、间断与无穷，再映射到画布坐标。支持四则运算、幂、三角函数、对数、绝对值、常数 $\pi$ 与 $e$，可省略乘号（如 \env{2x}）。参数滑块改变系数后，图像与式子同步更新。
+
+\subsection{桌面打包与交付}
+
+目录版把 Python 运行时、后端、前端静态资源与 Electron 壳放进一个目录，双击 exe 即用；单文件版用 PyInstaller 自解压到临时目录。两者都读取 exe 同级 \file{.env}，单文件版通过 \env{PORTABLE_EXECUTABLE_DIR} 定位。桌面二进制包含 AGPL 组件，许可证与 NOTICE 随包提供。
+
+% ================= 5 =================
+\section{项目图片}
+
+以下图片取自实际运行界面与演示视频，均为真实操作，不是设计稿。
+
+\subsection{新手引导}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.62\textwidth]{intro-img/c01.png}
+\caption{首次启动的四步引导：上传、出题、批改、讲解。图为第 3 步，提示批改会指出错在第几步并给出更优解法。}
+\end{figure}
+
+\subsection{识别与知识卡片}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.52\textwidth]{intro-img/02-cards.png}
+\caption{左侧为识别来源与知识卡片：标题、摘要、公式、正文均可编辑，卡片上的“编辑”入口支持人工修正。}
+\end{figure}
+
+\subsection{逐条出题与验收单}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{intro-img/c03.png}
+\caption{命题结果逐条进入练习卷：先标“待验算”，验过才亮“已验算”；顶部验收单写明 5 题、4 题符号验算、1 题结构检查。}
+\end{figure}
+
+\subsection{AI 批改分步清单}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{intro-img/c04.png}
+\caption{批改面板：得分、首个出错步骤、错误原因、更优解法与改进建议。本例第 1 步未找出二次项系数，直接指出并给出系数符号判断法。}
+\end{figure}
+
+\subsection{错题讲解函数图}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.55\textwidth]{intro-img/05-graph.png}
+\caption{错题讲解页：输入函数表达式即可画出图像，标出零点与对称轴；参数变化时图像与式子同步更新。}
+\end{figure}
+
+\subsection{知识谱系}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.96\textwidth]{intro-img/c06.png}
+\caption{知识谱系：节点大小表示出题量，颜色深浅表示被问次数，连线表示共享标签；右侧为最常被问 Top 10。}
+\end{figure}
+
+% ================= 6 =================
+\section{发表与获奖情况}
+
+本作品此前未在任何期刊、会议或预印本平台发表，未参加其他比赛，也未获得任何奖项。本次为首次以当前完整作品形态参赛。
+
+代码仓库是应本次比赛要求首次公开，地址为 \url{https://github.com/Td12138/yizhi-chengke}（Public，MIT）。仓库保留按功能模块与核心 AI 会话划分的提交记录，没有为参赛补造历史或修改提交时间。
+
+演示视频与技术文档均随本次赛事首次提交。技术文档介绍设计意图、架构、接口、测试、评测口径与已知边界；演示视频展示实际操作与 AI 协同过程。上述材料此前未作为其他发表、参赛或获奖材料使用。
+
+% ================= 7 =================
+\section{原创性与二次开发说明}
+
+一纸成课为完全原创作品，不是基于任何现有项目、模板成品或开源应用进行二次开发，也未 fork 其他错题本、扫描或出题项目。业务流程、七个 Agent 的分工、验算回环、事件看板、知识卡片修订、函数图交互与桌面封装均围绕本作品需求独立设计并实现。
+
+开发中使用 AI 辅助讨论方案、生成部分代码建议、补充测试与评审；采用与否由开发者判断。核心 Prompt 链、需求变更与修复过程保存在 \file{docs/ai-logs/}，可以逐条对照提交记录复跑。
+
+项目只使用通用开源库与运行时组件完成基础能力，包括 FastAPI、React、sympy、PyMuPDF、PyInstaller、Electron、KaTeX、python-docx 等。它们提供 Web 框架、界面、符号计算、文档处理、打包与公式渲染能力，不等同于引入一个已有的同类作品。第三方依赖、许可证、NOTICE 与桌面二进制中 AGPL 组件的说明统一见仓库根目录 \file{THIRD_PARTY_NOTICES.md}；源码 MIT 许可不用于掩盖组件自身的许可义务。
+
+运行时可选择调用智谱、DeepSeek 等第三方模型 API，模型与 API 服务不属于本作品自研成果；mock 样例与本地规则用于无 Key 复现与确定性测试。作品未宣称训练或微调自有基础模型。
+
+早期方案草稿、内部评审记录、实验数据与演示素材未公开。公开仓库仅包含本次交付所需的源码、文档、样例、测试、AI 快照与许可说明；早期草稿与素材不作为已发表成果，也未授权给其他参赛作品使用。
+
+% ================= 附录 =================
+\appendix
+\section{十分钟复现清单}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}p{1.2cm}p{1.8cm}p{5.4cm}X@{}}
+\toprule
+\textbf{步骤} & \textbf{耗时} & \textbf{命令 / 动作} & \textbf{通过标准} \\
+\midrule
+1 & 0.5 min & \file{git clone https://github.com/Td12138/yizhi-chengke.git} & 看到 \file{apps/}、\file{docs/} \\
+2 & 3--4 min & 安装后端依赖并启动 uvicorn & 打印 \env{Uvicorn running on http://127.0.0.1:8710} \\
+3 & 2--3 min & \file{cd apps/web \&\& npm install \&\& npm run dev} & Vite 打印 \env{Local: http://127.0.0.1:5173} \\
+4 & 0.2 min & \file{curl http://127.0.0.1:8710/api/health} & 返回 \env{"ready": true} \\
+5 & 2 min & 上传示例板书 → 生成 → 答一题 → 批改 & 看板出现 7 个 Agent，题目标出验算级别 \\
+6 & 2 min & \file{python -m pytest apps/server/tests -q} & 403 passed \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{第三方依赖与许可}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}p{3.6cm}p{3.0cm}X@{}}
+\toprule
+\textbf{组件} & \textbf{许可} & \textbf{用途} \\
+\midrule
+FastAPI / Uvicorn & MIT / BSD & 后端服务与 ASGI 运行时 \\
+React / Vite / TypeScript & MIT & 前端界面与构建 \\
+sympy & BSD & 符号验算与等价判分 \\
+PyMuPDF & AGPL & PDF 文本提取与页面渲染 \\
+PyInstaller & GPL + 例外 & 桌面运行时打包 \\
+Electron & MIT & 桌面壳 \\
+KaTeX & MIT & 公式渲染 \\
+python-docx & MIT & DOCX 解析 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+完整许可证文本与 NOTICE 见仓库 \file{THIRD_PARTY_NOTICES.md}。
 
 \end{document}
